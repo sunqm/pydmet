@@ -405,7 +405,7 @@ class RHF(scf.hf.RHF):
         self.release_eri()
         self.bas_on_frag = select_ao_on_fragment(mol, self.imp_atoms, \
                                                  self.imp_basidx)
-        c_inv = numpy.dot(self.orth_coeff.T, mol.intor_symmetric('cint1e_ovlp_sph'))
+        c_inv = numpy.dot(self.orth_coeff.T, self.entire_scf.get_ovlp(mol))
         mo_orth = numpy.dot(c_inv, self.entire_scf.mo_coeff[:,self.entire_scf.mo_occ>1e-15])
         # self.imp_site, self.bath_orb, self.env_orb are based on orth-orbitals
         self.imp_site, self.bath_orb, self.env_orb = \
@@ -432,7 +432,7 @@ class RHF(scf.hf.RHF):
 
     def init_guess_method(self, mol):
         log.debug(self, 'init guess based on entire MO coefficients')
-        s = mol.intor_symmetric('cint1e_ovlp_sph')
+        s = self.entire_scf.get_ovlp(mol)
         eff_scf = self.entire_scf
         entire_scf_dm = eff_scf.calc_den_mat(eff_scf.mo_coeff, eff_scf.mo_occ)
         env_orb = numpy.dot(self.orth_coeff, self.env_orb)
@@ -467,14 +467,14 @@ class RHF(scf.hf.RHF):
     def get_hcore(self, mol=None):
         if mol is None:
             mol = self.mol
-        h1e = self.mat_ao2impbas(scf.hf.RHF.get_hcore(mol)) \
+        h1e = self.mat_ao2impbas(self.entire_scf.get_hcore(mol)) \
                 + self._vhf_env
         return h1e
 
     def get_ovlp(self, mol=None):
         if mol is None:
             mol = self.mol
-        s1e = self.mat_ao2impbas(mol.intor_symmetric('cint1e_ovlp_sph'))
+        s1e = self.mat_ao2impbas(self.entire_scf.get_ovlp(mol))
         return s1e
 
     def set_mo_occ(self, mo_energy, mo_coeff=None):
@@ -599,7 +599,7 @@ environment two-electron part'''
         # mo_coeff_on_imp based on embedding basis + bath
         # mo_coeff based on AOs
         self.mo_coeff = numpy.dot(self.impbas_coeff, self.mo_coeff_on_imp)
-        s = self.mol.intor_symmetric('cint1e_ovlp_sph')
+        s = self.entire_scf.get_ovlp(self.mol)
         mo0 = self.entire_scf.mo_coeff[:,self.entire_scf.mo_occ>0]
         mo1 = numpy.hstack((self.mo_coeff[:,self.mo_occ>0], \
                             numpy.dot(self.orth_coeff, self.env_orb)))
@@ -615,7 +615,7 @@ environment two-electron part'''
                 self.calc_frag_elec_energy(self.mol, vhf, dm)
         log.log(self, 'fragment electronic energy = %.15g', self.e_frag)
         log.log(self, 'fragment electron number = %.15g', self.n_elec_frag)
-        self.frag_mulliken_pop()
+        #self.frag_mulliken_pop()
         return self.e_frag
 
     def nuclear_repulsion(self, mol):
@@ -644,10 +644,10 @@ environment two-electron part'''
         '''Mulliken M_ij = D_ij S_ji, Mulliken chg_i = \sum_j M_ij'''
         mol = self.mol
         log.info(self, ' ** Mulliken pop (on impurity basis)  **')
-        c_inv = numpy.dot(self.orth_coeff.T, mol.intor_symmetric('cint1e_ovlp_sph'))
+        s1e = self.get_ovlp(self.mol)
+        c_inv = numpy.dot(self.orth_coeff.T, s1e)
         c_frag = numpy.dot(c_inv, self.impbas_coeff)
         dm = self.calc_den_mat(self.mo_coeff_on_imp, self.mo_occ)
-        s1e = self.get_ovlp(mol)
         dm_frag = numpy.dot(dm, self.frag_non_symm_projector(s1e))
         dm = reduce(numpy.dot, (c_frag, dm_frag, c_frag.T.conj()))
         pop = dm.diagonal()
@@ -678,7 +678,7 @@ environment two-electron part'''
     def diff_dm(self):
         # diff between the SCF DM and DMET DM for fragment block
         mol = self.mol
-        s = mol.intor_symmetric('cint1e_ovlp_sph')
+        s = self.entire_scf.get_ovlp(self.mol)
         c_inv = numpy.dot(self.orth_coeff.T, s)
         eff_scf = self.entire_scf
         mo = numpy.dot(c_inv, eff_scf.mo_coeff)
@@ -780,7 +780,7 @@ environment two-electron part'''
     def suborth_imp_to_env(self, impbas_coeff):
         c = numpy.hstack((numpy.dot(self.orth_coeff, self.env_orb), \
                           impbas_coeff))
-        s = self.mol.intor_symmetric('cint1e_ovlp_sph')
+        s = self.entire_scf.get_ovlp(self.mol)
         t = schmidt_orth_coeff(reduce(numpy.dot, (c.T.conj(), s, c)))
         off = self.env_orb.shape[1]
         impbas_coeff = numpy.dot(c, t)[:,off:]
@@ -801,7 +801,7 @@ environment two-electron part'''
 #        v[idx] = hyb
 #
 #        # fix the phase of s and p
-#        s = self.mol.intor_symmetric('cint1e_ovlp_sph')
+#        s = self.entire_scf.get_ovlp(self.mol)
 #        sh = (numpy.mat(s) * v)[idx,:]
 #        if (hyb[0,0] * sh[0,0]) * (hyb[1:,0].T * sh[1:,0]) < 0:
 #            hyb[0] = -hyb[0]
@@ -879,7 +879,7 @@ environment two-electron part'''
             if ia not in self.imp_atoms:
                 mol.set_rinv_orig(mol.coord_of_atm(ia))
                 chg = mol.charge_of_atm(ia)
-                bnuc += -chg * mol.intor_symmetric('cint1e_rinv_sph')
+                bnuc += -chg * self.entire_scf.get_ovlp(self.mol)
 
         bnuc = self.mat_ao2impbas(bnuc)
         print bnuc + self._vhf_env
@@ -891,7 +891,7 @@ environment two-electron part'''
     def dets_ovlp(self, mol, orbs):
         '''det(<i*|i>):  |i*> = P|i>,  P = |x>S^{-1}<x|'''
         mo0 = self.entire_scf.mo_coeff[:,self.entire_scf.mo_occ>0]
-        s = mol.intor_symmetric('cint1e_ovlp_sph')
+        s = self.entire_scf.get_ovlp(self.mol)
         orbs1 = numpy.hstack((orbs, numpy.dot(self.orth_coeff, self.env_orb)))
         tmp = reduce(numpy.dot, (orbs1.T.conj(), s, orbs1))
         proj = reduce(numpy.dot, (orbs1, numpy.linalg.inv(tmp), \
@@ -959,7 +959,7 @@ class UHF(RHF, scf.hf.UHF):
                             impbas_coeff[0]))
         c_b = numpy.hstack((numpy.dot(self.orth_coeff, self.env_orb[1]), \
                             impbas_coeff[1]))
-        s = self.mol.intor_symmetric('cint1e_ovlp_sph')
+        s = self.entire_scf.get_ovlp(self.mol)[0]
         t_a = schmidt_orth_coeff(reduce(numpy.dot, (c_a.T.conj(), s, c_a)))
         t_b = schmidt_orth_coeff(reduce(numpy.dot, (c_b.T.conj(), s, c_b)))
         impbas_coeff = (numpy.dot(c_a, t_a)[:,self.env_orb[0].shape[1]:], \
@@ -971,7 +971,7 @@ class UHF(RHF, scf.hf.UHF):
             self.orth_coeff = self.get_orth_ao(mol)
         self.bas_on_frag = select_ao_on_fragment(mol, self.imp_atoms, \
                                                  self.imp_basidx)
-        c_inv = numpy.dot(self.orth_coeff.T, mol.intor_symmetric('cint1e_ovlp_sph'))
+        c_inv = numpy.dot(self.orth_coeff.T, self.entire_scf.get_ovlp(self.mol)[0])
         mo_a, mo_b = self.entire_scf.mo_coeff
         occ_a, occ_b = self.entire_scf.mo_occ
         mo_orth_a = numpy.dot(c_inv, mo_a[:,self.entire_scf.mo_occ[0]>1e-15])
@@ -1054,7 +1054,7 @@ class UHF(RHF, scf.hf.UHF):
 
     def init_guess_method(self, mol):
         log.debug(self, 'init guess based on entire MO coefficients')
-        s = mol.intor_symmetric('cint1e_ovlp_sph')
+        s = self.entire_scf.get_ovlp(self.mol)[0]
         eff_scf = self.entire_scf
         entire_scf_dm = eff_scf.calc_den_mat(eff_scf.mo_coeff, eff_scf.mo_occ)
         env_a = numpy.dot(self.orth_coeff, self.env_orb[0])
@@ -1191,7 +1191,7 @@ class UHF(RHF, scf.hf.UHF):
         c_a = numpy.dot(self.impbas_coeff[0], self.mo_coeff_on_imp[0])
         c_b = numpy.dot(self.impbas_coeff[1], self.mo_coeff_on_imp[1])
         self.mo_coeff = (c_a,c_b)
-        s = self.mol.intor_symmetric('cint1e_ovlp_sph')
+        s = self.entire_scf.get_ovlp(self.mol)[0]
         mo0_a = self.entire_scf.mo_coeff[0][:,self.entire_scf.mo_occ[0]>0]
         mo0_b = self.entire_scf.mo_coeff[1][:,self.entire_scf.mo_occ[1]>0]
         mo1_a = numpy.hstack((c_a[:,self.mo_occ[0]>0], \
@@ -1216,7 +1216,7 @@ class UHF(RHF, scf.hf.UHF):
 
     def calc_frag_elec_energy(self, mol, vhf, dm):
         h1e = self.get_hcore(mol)
-        s1e = self.get_ovlp(mol)
+        s1e = self.get_ovlp(self.mol)
         proj_a = self.frag_non_symm_projector(s1e[0])
         proj_b = self.frag_non_symm_projector(s1e[1])
         dm_frag_a = numpy.dot(dm[0], proj_a)
@@ -1245,7 +1245,7 @@ class UHF(RHF, scf.hf.UHF):
         '''Mulliken M_ij = D_ij S_ji, Mulliken chg_i = \sum_j M_ij'''
         mol = self.mol
         log.info(self, ' ** Mulliken pop alpha/beta (on impurity basis)  **')
-        c_inv = numpy.dot(self.orth_coeff.T, mol.intor_symmetric('cint1e_ovlp_sph'))
+        c_inv = numpy.dot(self.orth_coeff.T, self.entire_scf.get_ovlp(mol)[0])
         c_frag_a = numpy.dot(c_inv, self.impbas_coeff[0])
         c_frag_b = numpy.dot(c_inv, self.impbas_coeff[1])
         dm = self.calc_den_mat(self.mo_coeff_on_imp, self.mo_occ)
@@ -1284,7 +1284,7 @@ class UHF(RHF, scf.hf.UHF):
 
     def diff_dm(self):
         mol = self.mol
-        s = mol.intor_symmetric('cint1e_ovlp_sph')
+        s = self.entire_scf.get_ovlp(self.mol)[0]
         c_inv = numpy.dot(self.orth_coeff.T, s)
         eff_scf = self.entire_scf
         mo_a = numpy.dot(c_inv, eff_scf.mo_coeff[0])
@@ -1422,7 +1422,7 @@ class UHF(RHF, scf.hf.UHF):
         '''det(<i*|i>):  |i*> = P|i>,  P = |x>S^{-1}<x|'''
         mo_a = self.entire_scf.mo_coeff[0][:,self.entire_scf.mo_occ[0]>0]
         mo_b = self.entire_scf.mo_coeff[1][:,self.entire_scf.mo_occ[1]>0]
-        s = mol.intor_symmetric('cint1e_ovlp_sph')
+        s = self.entire_scf.get_ovlp(self.mol)[0]
         orbsa = numpy.hstack((orbs[0], numpy.dot(self.orth_coeff, self.env_orb[0])))
         orbsb = numpy.hstack((orbs[1], numpy.dot(self.orth_coeff, self.env_orb[1])))
         sinva = numpy.linalg.inv(reduce(numpy.dot, (orbsa.T, s, orbsa)))

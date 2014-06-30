@@ -15,8 +15,8 @@ class OneImp(junk.hf.RHF):
         self.bas_on_frag = basidx
         #self.solve_imp = \
         #        impsolver.use_local_solver(impsolver.fci, with_rdm1=True)
-        self.solve_imp = \
-                impsolver.use_local_solver(impsolver.cc, with_rdm1=True)
+        #self.solve_imp = \
+        #        impsolver.use_local_solver(impsolver.cc, with_rdm1=True)
 
     def init_dmet_scf(self, mol=None):
         effscf = self.entire_scf
@@ -29,8 +29,7 @@ class OneImp(junk.hf.RHF):
         self.impbas_coeff = numpy.zeros((nao, nemb))
         self.impbas_coeff[self.bas_on_frag,:nimp] = self.imp_site
         bas_off_frag = [i for i in range(nao) if i not in self.bas_on_frag]
-        #print self.bath_orb.shape,self.impbas_coeff.shape, nao,nimp,nemb
-        self.impbas_coeff[bas_off_frag,nimp:] = self.bath_orb
+        self.impbas_coeff[:,nimp:] = self.bath_orb
 
         self.nelectron = effscf._fcidump['NELEC'] - self.env_orb.shape[1] * 2
         log.info(self, 'number of electrons for impurity  = %d', \
@@ -39,21 +38,23 @@ class OneImp(junk.hf.RHF):
         log.debug(self, 'init Hartree-Fock environment')
         dm_env = numpy.dot(self.env_orb, self.env_orb.T.conj()) * 2
         vhf_env_ao = effscf.get_eff_potential(self.mol, dm_env)
-        hcore = effscf._fcidump['HCORE']
+        hcore = effscf.get_hcore()
         self.energy_by_env = lib.trace_ab(dm_env, hcore) \
                            + lib.trace_ab(dm_env, vhf_env_ao) * .5
         self._vhf_env = self.mat_ao2impbas(vhf_env_ao)
 
 def dmet_1shot(mol, emb):
     log.info(emb, '==== start DMET 1 shot ====')
-    emb.init_dmet_scf()
-    e, rdm1 = emb.solve_imp(mol, emb)
+    #emb.init_dmet_scf()
+    emb.imp_scf()
+    solve_imp = impsolver.use_local_solver(impsolver.cc, with_rdm1=True)
+    #solve_imp = impsolver.use_local_solver(impsolver.fci, with_rdm1=True)
+    eci, rdm1 = solve_imp(mol, emb)
+    print eci, emb.hf_energy
     hcore = emb.mat_ao2impbas(emb.entire_scf.get_hcore(mol))
-    e_tot = e + emb.energy_by_env \
-            + lib.trace_ab(rdm1, hcore) \
-            + lib.trace_ab(rdm1, emb._vhf_env) * .5
+    e_tot = eci + emb.energy_by_env
     log.log(emb, 'e_tot = %.11g' % e_tot)
-    return e_tot
+    return e_tot, eci-emb.hf_energy
 
 
 if __name__ == '__main__':
@@ -61,12 +62,13 @@ if __name__ == '__main__':
     import hf
     mol = gto.Mole()
     mol.verbose = 5
-    mol.output = 'out_hf'
+    mol.output = 'out_dmet_1shot'
     mol.build()
 
-    mf = hf.RHF(mol, 'C_solid_2x2x2/test2/FCIDUMP')
+    mf = hf.RHF(mol, 'C_solid_2x2x2/test2/FCIDUMP.CLUST.GTO',
+                'C_solid_2x2x2/test2/JKDUMP')
     energy = mf.scf()
     print energy
 
-    emb = OneImp(mol, mf, [0,1,2])
+    emb = OneImp(mol, mf, [0,1,2,3])
     print dmet_1shot(mol, emb)
