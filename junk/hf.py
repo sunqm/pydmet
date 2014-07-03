@@ -16,12 +16,12 @@ import scipy.linalg.flapack as lapack
 import h5py
 
 import gto
-import lib.logger as log
-import lib.pycint as pycint
-import scf
-import lib.parameters as param
-import lib
-import ao2mo
+from pyscf import scf
+from pyscf import lib
+import pyscf.lib.parameters as param
+import pyscf.lib.logger as log
+import pyscf.lib.pycint as pycint
+from pyscf import ao2mo
 
 def lowdin_orth_coeff(s):
     ''' new basis is |mu> c^{lowdin}_{mu i} '''
@@ -1450,10 +1450,10 @@ class UHF(RHF, scf.hf.UHF):
 
 
 if __name__ == '__main__':
-    import scf
+    from pyscf import scf
     mol = gto.Mole()
     mol.verbose = 1
-    mol.output = 'out_default'
+    mol.output = 'out_hf'
     mol.atom.extend([
         ['O' , (0. , 0.     , 0.)],
         [1   , (0. , -0.757 , 0.587)],

@@ -14,9 +14,7 @@ import tempfile
 import ctypes
 import cPickle as pickle
 import numpy
-import gto
-import pycint
-import scf
+from pyscf import scf
 
 def head(nmo, nelec, fout):
     fout.write(' &FCI NORB= %3d,NELEC=%2d,MS2= 0,\n' % (nmo, nelec))

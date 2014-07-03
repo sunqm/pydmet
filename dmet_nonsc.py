@@ -1,15 +1,14 @@
 #!/usr/bin/env python
 
 import numpy
-import lib
-import lib.logger as log
-import scf
 import impsolver
-import junk
 import junk.hf
-import ao2mo
-import lib._vhf as _vhf
+from pyscf import lib
+import pyscf.lib.logger as log
+from pyscf.lib import _vhf
+from pyscf import ao2mo
 
+# AO basis of entire system are orthogonal sets
 class OneImp(junk.hf.RHF):
     def __init__(self, mol, entire_scf, basidx):
         orth_ao = numpy.eye(entire_scf.mo_energy.size)
@@ -41,8 +40,9 @@ class OneImp(junk.hf.RHF):
         dm_env = numpy.dot(self.env_orb, self.env_orb.T.conj()) * 2
         vhf_env_ao = effscf.get_eff_potential(self.mol, dm_env)
         hcore = effscf.get_hcore()
-        self.energy_by_env = lib.trace_ab(dm_env, hcore) \
-                           + lib.trace_ab(dm_env, vhf_env_ao) * .5
+        self.energy_by_env = numpy.dot(dm_env.flatten(), hcore.flatten()) \
+                           + numpy.dot(dm_env.flatten(), \
+                                       vhf_env_ao.flatten()) * .5
         self._vhf_env = self.mat_ao2impbas(vhf_env_ao)
 
 class OneImpNI(OneImp):
@@ -92,39 +92,65 @@ def dmet_1shot(mol, emb):
     emb.imp_scf()
     #solve_imp = impsolver.use_local_solver(impsolver.cc, with_rdm1=True)
     solve_imp = impsolver.use_local_solver(impsolver.fci, with_rdm1=True)
-    eci, rdm1 = solve_imp(mol, emb)
+    eci, _, rdm1 = solve_imp(mol, emb)
+
     print eci, emb.hf_energy
-    hcore = emb.get_hcore(mol)
     e_tot = eci + emb.energy_by_env
-    log.log(emb, 'e_tot = %.11g, (+nuc=%.11g)',
+    log.info(emb, 'e_tot = %.11g, (+nuc=%.11g)',
             e_tot, e_tot+mol.nuclear_repulsion())
+
     return e_tot+mol.nuclear_repulsion(), eci-emb.hf_energy
+
+# do embedding once, for entire system without self-consistence
+def dmet_fullsys(mol, embsys):
+    import junk.dmet_sc
+    embsys.max_iter = 1
+
+    #solve_imp = impsolver.use_local_solver(impsolver.cc, with_rdm1=True)
+    solve_imp = impsolver.use_local_solver(impsolver.fci, with_rdm1=True)
+
+    # for translational symmetric sys
+    def assemble_energy(mol):
+        emb = embsys.embs[0]
+        nimp = len(emb.bas_on_frag)
+        e, e_frag, rdm1 = solve_imp(mol, emb)
+        nelec_frag = rdm1[:nimp].trace()
+        log.debug(mol, 'e_frag = %.9g, nelec_frag = %.9g', e_frag, nelec_frag)
+        nfrag = len(embsys.frag_group)
+        return e_frag*nfrag, nelec_frag*nfrag
+    embsys.assemble_frag_fci_energy = assemble_energy
+    embsys.frag_fci_solver = lambda mol, emb: (solve_imp(mol, emb)[2], '')
+
+    e_tot, _ = junk.dmet_sc.dmet_sc_cycle(mol, embsys)
+    return e_tot
+
 
 
 if __name__ == '__main__':
-    import gto
+    from pyscf import scf
+    from pyscf import gto
     import hf
-    mol = gto.Mole()
-    mol.verbose = 5
-    mol.output = 'out_dmet_1shot'
-    mol.build()
-
-    mf = hf.RHF(mol, 'C_solid_2x2x2/test2/FCIDUMP.CLUST.GTO',
-                'C_solid_2x2x2/test2/JKDUMP')
-    energy = mf.scf()
-    print energy
-
-    emb = OneImp(mol, mf, [0,1,2,3])
-    print dmet_1shot(mol, emb)
+#    mol = gto.Mole()
+#    mol.verbose = 5
+#    mol.output = 'out_dmet_1shot'
+#    mol.build()
+#
+#    mf = hf.RHF(mol, 'C_solid_2x2x2/test2/FCIDUMP.CLUST.GTO',
+#                'C_solid_2x2x2/test2/JKDUMP')
+#    energy = mf.scf()
+#    print energy
+#
+#    emb = OneImp(mol, mf, [0,1,2,3])
+#    print dmet_1shot(mol, emb)
 
 ######################
     mol = gto.Mole()
     mol.verbose = 5
     mol.output = 'out_hf'
-    mol.atom.extend([
+    mol.atom = [
         ['O' , (0. , 0.     , 0.)],
         [1   , (0. , -0.757 , 0.587)],
-        [1   , (0. , 0.757  , 0.587)] ])
+        [1   , (0. , 0.757  , 0.587)] ]
     mol.basis = {'H': '6-31g',
                  'O': '6-31g',}
     mol.build()
@@ -137,3 +163,20 @@ if __name__ == '__main__':
     emb = OneImpNI(mol, mf, [0,1,2,3])
     print dmet_1shot(mol, emb)
 
+    b1 = 2.0
+    nat = 10
+    mol.output = 'h%s_1x_dmeft_impblk_dz' % nat
+    mol.atom = []
+    r = b1/2 / numpy.sin(numpy.pi/nat)
+    for i in range(nat):
+        theta = i * (2*numpy.pi/nat)
+        mol.atom.append((1, (r*numpy.cos(theta),
+                             r*numpy.sin(theta), 0)))
+
+    mol.basis = {'H': 'sto-3g',}
+    mol.build()
+    mf = scf.RHF(mol)
+    print mf.scf()
+    import junk.dmet_sc
+    embsys = junk.dmet_sc.EmbSys(mol, mf, [[0,1]]*5)
+    print dmet_fullsys(mol, embsys)
