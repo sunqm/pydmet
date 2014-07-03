@@ -3,7 +3,7 @@
 # -*- coding: utf-8
 
 '''
-Non-relativistic Hartree-Fock
+DMET Hartree-Fock
 '''
 
 __author__ = 'Qiming Sun <osirpt.sun@gmail.com>'
@@ -21,6 +21,7 @@ import lib.pycint as pycint
 import scf
 import lib.parameters as param
 import lib
+import ao2mo
 
 def lowdin_orth_coeff(s):
     ''' new basis is |mu> c^{lowdin}_{mu i} '''
@@ -489,19 +490,31 @@ class RHF(scf.hf.RHF):
         log.debug(self, '  mo_energy = %s', mo_energy)
         return mo_occ
 
-    def calc_den_mat(self, mo_coeff, mo_occ):
+    def calc_den_mat(self, mo_coeff=None, mo_occ=None):
+        if mo_coeff is None:
+            mo_coeff = self.mo_coeff_on_imp
+        if mo_occ is None:
+            mo_occ = self.mo_occ
         nbf = mo_coeff.shape[0]
         mo = mo_coeff[:,mo_occ>0]
         dm = numpy.dot(mo, mo.T.conj()) * 2
         log.debug(self, 'density.diag = %s', dm.diagonal())
         return dm
 
+    def eri_on_impbas(self, mol):
+        if self.entire_scf._eri is not None:
+            eri = ao2mo.incore.full(self.entire_scf._eri, self.impbas_coeff)
+        else:
+            eri = ao2mo.direct.full_iofree(self.entire_scf._eri, \
+                                           self.impbas_coeff)
+        return eri
+
     def release_eri(self):
         self._eri = None
 
 #    def dot_eri_dm(self, mol, dm):
 #        if self._eri is None:
-#            self._eri = self.setup_eri_on_impbas(mol)
+#            self._eri = self.eri_on_impbas(mol)
 #        return scf._vhf.vhf_jk_o2(self._eri, dm)
 #
 #    def get_eff_potential(self, mol, dm, dm_last=0, vhf_last=0):
@@ -1448,8 +1461,26 @@ if __name__ == '__main__':
     mol.basis = {'H': '6-31g',
                  'O': '6-31g',}
     mol.build()
+    mf = scf.RHF(mol)
+    print mf.scf()
 
-    imp = RHF(scf.RHF(mol))
-    imp.set_embsys([1,])
-    print imp.bath_orbital(mol)
-    print imp.bath_orbital(mol, [2,3])
+#    imp = RHF(mf)
+#    imp.set_embsys([1,])
+#    print imp.bath_orbital(mol)
+#    print imp.bath_orbital(mol, [2,3])
+
+    emb = RHF(mf)
+    emb.imp_basidx = [1,2,3,4]
+    emb.imp_scf()
+
+#    import ci
+#    h1e = emb.get_hcore()
+#    rdm1 = numpy.empty_like(h1e)
+#    eri = emb.eri_on_impbas(mol)
+#    rec = ci.fci._run(mol, emb.nelectron, h1e, eri, 0, rdm1=rdm1)
+#    e_fci = ci.fci.find_fci_key(rec, 'STATE 1 ENERGY')
+#    # no "numpy.dot(rdm1.flatten(), emb._vhf_env.flatten())" because it's
+#    # already included in the dot(h1e,rdm1)
+#    e_tot = e_fci + emb.energy_by_env
+#    print e_fci, e_tot, e_tot + mol.nuclear_repulsion()
+#    print rdm1

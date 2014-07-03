@@ -96,10 +96,20 @@ def use_local_solver(local_solver, with_rdm1=None):
         if vfit is not 0:
             nv = vfit.shape[0]
             h1e[:nv,:nv] += vfit
-        int2e = ao2mo.incore.full(emb.entire_scf._eri, emb.mo_coeff)
+        if emb._eri is None:
+            eri = emb.eri_on_impbas(mol)
+        else:
+            eri = emb._eri
+        eri1 = numpy.zeros(eri.size)
+        ij = 0
+        for i in range(eri.shape[0]):
+            for j in range(i+1):
+                eri1[ij] = eri[i,j]
+                ij += 1
+        eri = ao2mo.incore.full(eri1, emb.mo_coeff_on_imp)
         nelec = emb.nelectron
-        nimp = emb.dim_of_impurity()
-        res = local_solver(mol, nelec, h1e, int2e, with_rdm1, ptrace=nimp)
+        nimp = len(emb.bas_on_frag)
+        res = local_solver(mol, nelec, h1e, eri, with_rdm1)#, ptrace=nimp)
         if with_rdm1 is not None:
             return res[0], reduce(numpy.dot, (emb.mo_coeff_on_imp, res[1], \
                                               emb.mo_coeff_on_imp.T))
