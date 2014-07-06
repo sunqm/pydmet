@@ -5,23 +5,16 @@
 # Author: Qiming Sun <osirpt.sun@gmail.com>
 #
 
-'''
-Non-relativistic Hartree-Fock
-'''
-
-__author__ = 'Qiming Sun <osirpt.sun@gmail.com>'
-
 import sys
-import time
 import re
 
 import numpy
 #import scipy.linalg.flapack as lapack
-import gto
-import scf
-import lib
-import lib.logger as log
-import lib.parameters as param
+from pyscf import gto
+from pyscf import scf
+from pyscf import lib
+import pyscf.lib.logger as log
+import pyscf.lib.parameters as param
 
 
 class RHF(scf.hf.RHF):

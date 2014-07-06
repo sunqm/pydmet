@@ -188,13 +188,18 @@ def frag_fci(mol, emb, vfit=0):
     nimp = emb.dim_of_impurity()
     nelec = emb.nelectron
     rec = ci.fci._run(mol, nelec, h1e, int2e, 0, rdm1, ptrace=nimp)
-    return rdm1, rec
+    res = {'rdm1': rdm1, \
+           'etot': ci.fci.find_fci_key(rec, 'STATE 1 ENERGY'), \
+           'e1frag': numpy.dot(h1e[:nimp].reshape(-1),rdm1.reshape(-1)), \
+           'e2frag': ci.fci.find_fci_key(rec, 'STATE 1 pTraceSys'),
+           'rec': rec}
+    return res
 
 
-def get_emb_fci_e1_e2(emb, rdm1, rec, with_env_pot=FCI_WITH_ENV_POT):
+def get_emb_fci_e1_e2(emb, cires, with_env_pot=FCI_WITH_ENV_POT):
+    rdm1 = cires['rdm1']
     nimp = emb.dim_of_impurity()
-    log.debug(emb, 'FCI energy of (frag + bath) %.12g', \
-              ci.fci.find_fci_key(rec, 'STATE 1 ENERGY'))
+    log.debug(emb, 'FCI energy of (frag + bath) %.12g', cires['etot'])
 
     if emb._pure_hcore is not None:
         h1e = emb._pure_hcore
@@ -215,7 +220,7 @@ def get_emb_fci_e1_e2(emb, rdm1, rec, with_env_pot=FCI_WITH_ENV_POT):
     log.debug(emb, '   = %.12g = %.12g + %.12g + %.12g', \
               e1, e1_frag, e1_bath, e1_vfit)
     e2env_hf = dot(rdm1[:nimp], emb._vhf_env[:nimp]) * .5
-    e2 = ci.fci.find_fci_key(rec, 'STATE 1 pTraceSys')
+    e2 = res['e2frag']
     log.debug(emb, 'fragment e1 = %.12g, e2env_hf = %.12g, FCI pTraceSys = %.12g', \
               e1, e2env_hf, e2)
     log.debug(emb, 'fragment e2env_hf = %.12g, FCI pTraceSys = %.12g, nelec = %.12g', \
@@ -728,8 +733,8 @@ class EmbSys(object):
         val_tot = 0
         nelec = 0
         for m, emb in enumerate(self.embs):
-            rdm1, rec = self.frag_fci_solver(mol, emb)
-            val_frag, nelec_frag = get_emb_fci_e1_e2(emb, rdm1, rec)
+            cires = self.frag_fci_solver(mol, emb)
+            val_frag, nelec_frag = get_emb_fci_e1_e2(emb, cires)
 
             if isinstance(self.frag_group[m][0], int):
                 val_tot += val_frag
@@ -745,7 +750,8 @@ class EmbSys(object):
         ''' DM difference between FCI and model-MF'''
         ddm_group = []
         for m, emb in enumerate(self.embs):
-            dm_ref, rec = self.frag_fci_solver(mol, emb)
+            cires = self.frag_fci_solver(mol, emb)
+            dm_ref = cires['rdm1']
             nimp = emb.dim_of_impurity()
             s = emb.entire_scf.get_ovlp(mol)
             sc = reduce(numpy.dot, (emb.impbas_coeff.T.conj(), s, \
@@ -801,14 +807,15 @@ class EmbSys(object):
     def get_all_frag_fci_dm(self, mol):
         dm_group = []
         for m, emb in enumerate(self.embs):
-            rdm1, rec = self.frag_fci_solver(mol, emb)
-            dm_group.append(rdm1)
+            cires = self.frag_fci_solver(mol, emb)
+            dm_group.append(cires['rdm1'])
         return dm_group
 
 
 
 def fit_without_local_scf_iter(mol, emb):
-    dm_ref, rec = frag_fci(mol, emb, emb.env_fit_pot)
+    cires = frag_fci(mol, emb, emb.env_fit_pot)
+    dm_ref = cires['rdm1']
     nimp = emb.dim_of_impurity()
     # this fock matrix includes the pseudo potential of present fragment
     s = emb.entire_scf.get_ovlp(mol)
@@ -850,7 +857,8 @@ def fit_pot_1shot(mol, embsys, frag_id=0):
 def fit_pot_with_local_scf(embsys, mol):
     def fit_scfly(mol, emb):
         nimp = emb.dim_of_impurity()
-        dm_ref, rec = frag_fci(mol, emb, emb.env_fit_pot)
+        cires = frag_fci(mol, emb, emb.env_fit_pot)
+        dm_ref = cires['rdm1']
 
         # optimize initial guess to accelerate fragment-SCF convergence
         def _init_guess_method(mol):
@@ -930,7 +938,8 @@ def fit_vfci_fixed_mf_dm(embsys, mol):
         occ = emb.entire_scf.mo_occ
         emb_mf_dm = numpy.dot(mo[:,occ>0], mo[:,occ>0].T.conj()) * 2
 
-        dm_base, rec = frag_fci(mol, emb, emb.env_fit_pot)
+        cires = frag_fci(mol, emb, emb.env_fit_pot)
+        dm_base = cires['rdm1']
         vhf_env_bak = emb._vhf_env.copy()
         nimp = emb.dim_of_impurity()
         if FCI_WITH_ENV_POT:
@@ -939,8 +948,8 @@ def fit_vfci_fixed_mf_dm(embsys, mol):
             emb._vhf_env[:nimp,:nimp] += emb.env_fit_pot[:nimp,:nimp]
 
         def get_fci_dm_imp(v_inc):
-            rdm1,rec = frag_fci(mol, emb, v_inc[:nimp,:nimp])
-            return rdm1[:nimp,:nimp].flatten()
+            cires = frag_fci(mol, emb, v_inc[:nimp,:nimp])
+            return cires['rdm1'][:nimp,:nimp].flatten()
 
         def num_fitting(finite_inc_fac, dm_base, v_inc_base, dm_ref, \
                         max_cycle, dgrad=False):
@@ -1013,7 +1022,8 @@ def fit_vfci_fixed_mf_dm(embsys, mol):
 
 def fit_lieb_pot(embsys, mol):
     def fit_lieb_pot_iter(mol, emb):
-        dm_ref, rec = frag_fci(mol, emb, emb.env_fit_pot)
+        cires = frag_fci(mol, emb, emb.env_fit_pot)
+        dm_ref = cires['rdm1']
         nimp = emb.dim_of_impurity()
         # this fock matrix includes the pseudo potential of target fragment
         s = embsys.entire_scf.get_ovlp(mol)

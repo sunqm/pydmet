@@ -50,9 +50,13 @@ def cc(mol, nelec, h1e, h2e, ptrace, mo):
                 ij = i*(i+1)/2+j
             escf += (h2e[ii,jj] - h2e[ij,ij] * .5)
             jk += h2e[ii,jj] - h2e[ij,ij] * .5
-    print ecc, escf * 2
+    #print ecc, escf * 2
+    res = {'rdm1': reduce(numpy.dot, (mo, rdm1, mo.T)), \
+           'etot': ecc+escf*2, \
+           'e1frag': e1_ptrace, \
+           'e2frag': e2_ptrace*.5}
 
-    return ecc+escf*2, e_ptrace, reduce(numpy.dot, (mo, rdm1, mo.T))
+    return res
 
 def fci(mol, nelec, h1e, h2e, ptrace, mo):
     tmpfile = tempfile.mkstemp()[1]
@@ -74,22 +78,25 @@ def fci(mol, nelec, h1e, h2e, ptrace, mo):
     cmd.append(tmpfile)
 
     rec = commands.getoutput(' '.join(cmd))
-    e = find_fci_key(rec, '!FCI STATE 1 ENERGY')
-    e2_ptrace = find_fci_key(rec, '!FCI STATE 1 pTraceSys')
-    res = [e]
     rdm1 = []
     with open(filedm1, 'r') as fin:
         n = int(fin.readline().split()[-1])
         for d in fin.readlines():
             rdm1.append(map(float, d.split()))
     rdm1 = numpy.array(rdm1).reshape(n,n)
-    print rdm1.shape
     e1_ptrace = numpy.dot(rdm1[:ptrace].flatten(), h1e[:ptrace].flatten())
-    e_ptrace = e1_ptrace + e2_ptrace * .5
+    e2_ptrace = find_fci_key(rec, '!FCI STATE 1 pTraceSys')
+    e_ptrace = e1_ptrace + e2_ptrace
 
     os.remove(filedm1)
     os.remove(tmpfile)
-    return e, e_ptrace, rdm1
+    res = {'rdm1': rdm1, \
+           'etot': find_fci_key(rec, '!FCI STATE 1 ENERGY'), \
+           'e1frag': e1_ptrace, \
+           'e2frag': e2_ptrace,
+           'rec': rec}
+
+    return res
 
 def find_fci_key(rec, key):
     for dl in rec.splitlines():

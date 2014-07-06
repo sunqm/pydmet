@@ -155,7 +155,8 @@ class EmbSys(object):
         self.bas_off_frags = []
         self.vfit_method = fit_pot_without_local_scf
 
-        self.init_embsys(mol, init_v)
+        self.init_v = init_v
+        #self.init_embsys(mol, init_v)
 
     #def __copy__(self):
     #    new = self.__class__()
@@ -279,7 +280,7 @@ class EmbSys(object):
         eff_scf.verbose = verbose_bak
         return embs
 
-    # should call this subroutine before dmet_scf_cycle to initialize
+    # should call this subroutine before dmet_sc_cycle to initialize
     # embs.*_fit_pot
     def update_embsys_vglobal(self, mol, v_add):
         v_add_ao = scfci.mat_orthao2ao(mol, v_add, self.orth_coeff)
@@ -331,8 +332,8 @@ class EmbSys(object):
                 dm_ref = eff_scf.calc_den_mat(mo, eff_scf.mo_occ)
             val_tot, nelec = self.off_frags_energy(mol, dm_ref)
         for m, emb in enumerate(self.embs):
-            rdm1, rec = self.frag_fci_solver(mol, emb)
-            val_frag, nelec_frag = scfci.get_emb_fci_e1_e2(emb, rdm1, rec, \
+            cires = self.frag_fci_solver(mol, emb)
+            val_frag, nelec_frag = scfci.get_emb_fci_e1_e2(emb, cires, \
                                                            self.env_pot_for_fci)
             if isinstance(self.frag_group[m][0], int):
                 val_tot += val_frag
@@ -370,8 +371,8 @@ class EmbSys(object):
     def get_all_frag_fci_dm(self, mol):
         dm_group = []
         for m, emb in enumerate(self.embs):
-            rdm1, rec = self.frag_fci_solver(mol, emb)
-            dm_group.append(rdm1)
+            cires = self.frag_fci_solver(mol, emb)
+            dm_group.append(cires['rdm1'])
         return dm_group
 
     def set_local_fit_method(self, local_fit_approx):
@@ -399,7 +400,8 @@ class EmbSys(object):
 
 
 def fit_without_local_scf_iter(mol, emb, embsys):
-    dm_ref, rec = embsys.frag_fci_solver(mol, emb)
+    cires = embsys.frag_fci_solver(mol, emb)
+    dm_ref = cires['rdm1']
     log.debug(embsys, 'dm_ref = %s', dm_ref)
     nimp = emb.dim_of_impurity()
     # this fock matrix includes the pseudo potential of present fragment
@@ -444,7 +446,8 @@ def fit_pot_1shot(mol, embsys, frag_id=0):
 def fit_pot_with_local_scf(mol, embsys):
     def fit_scfly(mol, emb):
         nimp = emb.dim_of_impurity()
-        dm_ref, rec = embsys.frag_fci_solver(mol, emb)
+        cires = embsys.frag_fci_solver(mol, emb)
+        dm_ref = cires['rdm1']
 
         _vhf_env_bak = emb._vhf_env.copy()
         emb._vhf_env += emb.mat_orthao2impbas(embsys.v_global)
@@ -524,6 +527,7 @@ def fit_vfci_fixed_mf_dm(mol, embsys):
 # to minimize the DM difference, use mean-field analytic gradients
 def dmet_sc_cycle(mol, embsys):
     import scf
+    embsys.init_embsys(mol, embsys.init_v)
     _diis = scf.diis.DIIS(mol)
     #_diis.diis_space = 6
     v_add = embsys.v_global
