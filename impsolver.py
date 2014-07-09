@@ -12,15 +12,24 @@ import junk.molpro_fcidump
 
 FCIEXE = os.path.dirname(__file__) + '/fci'
 
+def scf_energy(h1e_mo, h2e_mo, nocc):
+    escf = 0
+    jk = 0
+    for i in range(nocc):
+        escf += h1e_mo[i,i]
+        ii = i*(i+1)/2 + i
+        for j in range(nocc):
+            jj = j*(j+1)/2 + j
+            if i < j:
+                ij = j*(j+1)/2+i
+            else:
+                ij = i*(i+1)/2+j
+            escf += (h2e_mo[ii,jj] - h2e_mo[ij,ij] * .5)
+            jk += h2e_mo[ii,jj] - h2e_mo[ij,ij] * .5
+    return escf*2
+
 def cc(mol, nelec, h1e, h2e, ptrace, mo):
     h1e = reduce(numpy.dot, (mo.T, h1e, mo))
-    eri = numpy.zeros(h2e.size)
-    ij = 0
-    for i in range(eri.shape[0]):
-        for j in range(i+1):
-            eri[ij] = eri[i,j]
-            ij += 1
-    eri = ao2mo.incore.full(eri1, mo)
 
     ps = psi4.Solver()
     with psi4.capture_stdout():
@@ -33,27 +42,23 @@ def cc(mol, nelec, h1e, h2e, ptrace, mo):
     p = numpy.dot(mo[:ptrace,:].T, mo[:ptrace,:])
     rdm1 = numpy.dot(p, rdm1)
     e1_ptrace = lib.trace_ab(rdm1.reshape(-1), h1e.reshape(-1))
+
     rdm2 = numpy.dot(p, rdm2.reshape(nmo,-1))
+    eri1 = numpy.empty(h2e.size)
+    ij = 0
+    for i in range(eri.shape[0]):
+        for j in range(i+1):
+            eri1[ij] = eri[i,j]
+            ij += 1
+    eri = ao2mo.incore.full(eri1, mo)
     e2_ptrace = lib.trace_ab(rdm2.reshape(-1), eri.reshape(-1))
     e_ptrace = e1_ptrace + e2_ptrace * .5
-    nocc = nelec / 2
-    escf = 0
-    jk = 0
-    for i in range(nocc):
-        escf += h1e[i,i]
-        ii = i*(i+1)/2 + i
-        for j in range(nocc):
-            jj = j*(j+1)/2 + j
-            if i < j:
-                ij = j*(j+1)/2+i
-            else:
-                ij = i*(i+1)/2+j
-            escf += (h2e[ii,jj] - h2e[ij,ij] * .5)
-            jk += h2e[ii,jj] - h2e[ij,ij] * .5
-    #print ecc, escf * 2
-    res = {'rdm1': reduce(numpy.dot, (mo, rdm1, mo.T)), \
-           'etot': ecc+escf*2, \
-           'e1frag': e1_ptrace, \
+    escf = scf_energy(h1e, h2e, nelec/2)
+    #print ecc, escf
+    res = {'rdm1': reduce(numpy.dot, (mo, rdm1, mo.T)),
+           #'escf': escf,
+           'etot': ecc+escf,
+           'e1frag': e1_ptrace,
            'e2frag': e2_ptrace*.5}
 
     return res
@@ -108,7 +113,7 @@ def find_fci_key(rec, key):
 def use_local_solver(local_solver, with_rdm1=None):
     def imp_solver(mol, emb, vfit=0):
         h1e = emb.get_hcore(mol)
-        if vfit is not 0:
+        if not (isinstance(vfit, int) and vfit is 0):
             nv = vfit.shape[0]
             h1e[:nv,:nv] += vfit
         if emb._eri is None:
@@ -120,3 +125,4 @@ def use_local_solver(local_solver, with_rdm1=None):
         res = local_solver(mol, nelec, h1e, eri, nimp, emb.mo_coeff_on_imp)
         return res
     return imp_solver
+

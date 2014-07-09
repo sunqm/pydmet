@@ -1,13 +1,4 @@
 #!/usr/bin/env python
-# $Id$
-# -*- coding: utf-8
-
-'''
-DMET Hartree-Fock
-'''
-
-__author__ = 'Qiming Sun <osirpt.sun@gmail.com>'
-__version__ = '$ 0.2 $'
 
 import os
 import tempfile
@@ -17,6 +8,7 @@ import h5py
 
 import gto
 from pyscf import scf
+from pyscf.scf import atom_hf
 from pyscf import lib
 import pyscf.lib.parameters as param
 import pyscf.lib.logger as log
@@ -33,7 +25,7 @@ def schmidt_orth_coeff(s):
     return numpy.linalg.inv(c).T.conj()
 
 def pre_orth_ao_atm_scf(mol):
-    atm_scf = scf.atom_hf.get_atm_nrhf_result(mol)
+    atm_scf = atom_hf.get_atm_nrhf_result(mol)
     nbf = mol.num_NR_function()
     c = numpy.zeros((nbf, nbf))
     p0 = 0
@@ -425,7 +417,7 @@ class RHF(scf.hf.RHF):
         env_orb = numpy.dot(self.orth_coeff, env_orb)
         dm_env = numpy.dot(env_orb, env_orb.T.conj()) * 2
         #vj, vk = scf.hf.get_vj_vk(pycint.nr_vhf_o3, mol, dm_env)
-        vhf_env_ao = scf.hf.RHF.get_eff_potential(self.entire_scf, self.mol, dm_env)
+        vhf_env_ao = self.entire_scf.get_eff_potential(self.mol, dm_env)
         hcore = self.entire_scf.get_hcore(mol)
         self.energy_by_env = lib.trace_ab(dm_env, hcore) \
                            + lib.trace_ab(dm_env, vhf_env_ao) * .5
