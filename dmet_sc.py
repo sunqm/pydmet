@@ -1,6 +1,4 @@
 #!/usr/bin/env python
-# $Id$
-# -*- coding: utf-8
 
 import time
 import pickle
@@ -9,24 +7,24 @@ import copy
 
 import pyscf.lib.logger as log
 from pyscf import scf
-import junk.hf
-import junk.fitdm
+import dmet_hf
+import fitdm
 import impsolver
 import pyscf.lib.parameters as param
 
 
 # options for fit_domain
-IMP_AND_BATH  = junk.fitdm.IMP_AND_BATH  # 1
-IMP_BLK       = junk.fitdm.IMP_BLK       # 2
-IMP_BATH_DIAG = junk.fitdm.IMP_BATH_DIAG # 3
-NO_BATH_BLK   = junk.fitdm.NO_BATH_BLK   # 4
-DIAG_BLK      = junk.fitdm.DIAG_BLK      # 5
-IMP_DIAG      = junk.fitdm.IMP_DIAG      # 6
-NO_IMP_BLK    = junk.fitdm.NO_IMP_BLK    # 7
-TRACE_IMP     = junk.fitdm.TRACE_IMP     # 8
+IMP_AND_BATH  = fitdm.IMP_AND_BATH  # 1
+IMP_BLK       = fitdm.IMP_BLK       # 2
+IMP_BATH_DIAG = fitdm.IMP_BATH_DIAG # 3
+NO_BATH_BLK   = fitdm.NO_BATH_BLK   # 4
+DIAG_BLK      = fitdm.DIAG_BLK      # 5
+IMP_DIAG      = fitdm.IMP_DIAG      # 6
+NO_IMP_BLK    = fitdm.NO_IMP_BLK    # 7
+TRACE_IMP     = fitdm.TRACE_IMP     # 8
 
 # options for dm_fit_constraint
-NO_CONSTRAINT = junk.fitdm.NO_CONSTRAINT # 0
+NO_CONSTRAINT = fitdm.NO_CONSTRAINT # 0
 #IMP_DIAG      = 6
 #TRACE_IMP     = 8
 
@@ -67,7 +65,7 @@ class EmbSys(object):
         self.fout = mol.fout
         self.mol = mol
         self.emb_verbose = param.VERBOSE_QUITE
-        self.OneImp = junk.hf.RHF
+        self.OneImp = dmet_hf.RHF
 
         self.max_iter         = 40
         self.conv_threshold   = 1e-5
@@ -90,7 +88,7 @@ class EmbSys(object):
 
         self.orth_coeff = orth_coeff
         if orth_coeff is None:
-            #self.pre_orth_ao = junk.hf.pre_orth_ao_atm_scf
+            #self.pre_orth_ao = dmet_hf.pre_orth_ao_atm_scf
             self.pre_orth_ao = lambda mol: numpy.eye(mol.num_NR_function())
             #self.orth_ao_method = 'meta_lowdin'
             self.orth_ao_method = 'lowdin'
@@ -129,7 +127,7 @@ class EmbSys(object):
 
     def init_embsys(self, mol):
         if self.orth_coeff is None:
-            self.orth_coeff = junk.hf.orthogonalize_ao(mol, self.entire_scf, \
+            self.orth_coeff = dmet_hf.orthogonalize_ao(mol, self.entire_scf, \
                                                        self.pre_orth_ao(mol), \
                                                        self.orth_ao_method)
         #self.basidx_group = map_frag_to_bas_idx(mol, self.frag_group)
@@ -193,7 +191,7 @@ class EmbSys(object):
         for ifrag, emb in enumerate(embs):
             mo_orth = numpy.dot(c_inv, eff_scf.mo_coeff[:,eff_scf.mo_occ>1e-15])
             emb.imp_site, emb.bath_orb, emb.env_orb = \
-                    junk.hf.decompose_orbital(emb, mo_orth, emb.bas_on_frag)
+                    dmet_hf.decompose_orbital(emb, mo_orth, emb.bas_on_frag)
             emb.impbas_coeff = emb.cons_impurity_basis()
             emb.nelectron = mol.nelectron - emb.env_orb.shape[1] * 2
             log.debug(emb, 'number of electrons for impurity %d = %d', \
@@ -308,8 +306,8 @@ class EmbSys(object):
         return all_frags, uniq_frags
 
     def meta_lowdin_orth(self, mol):
-        pre_orth = junk.hf.pre_orth_ao_atm_scf(mol)
-        self.orth_coeff = junk.hf.orthogonalize_ao(mol, self.entire_scf, \
+        pre_orth = dmet_hf.pre_orth_ao_atm_scf(mol)
+        self.orth_coeff = dmet_hf.orthogonalize_ao(mol, self.entire_scf, \
                                                    pre_orth, 'meta_lowdin')
         for emb in self.embs:
             emb.orth_coeff = self.orth_coeff
@@ -557,9 +555,9 @@ def fit_without_local_scf(mol, emb, embsys):
     if 0: #old fitting function for debug
         dv = scfopt.find_emb_potential(mol, dm_ref, fock0, nocc, nimp)
     else:
-        dv = junk.fitdm.fit_solver(embsys, fock0, nocc, nimp, dm_ref*.5, \
-                                   embsys.v_fit_domain, embsys.dm_fit_domain, \
-                                   embsys.dm_fit_constraint)
+        dv = fitdm.fit_solver(embsys, fock0, nocc, nimp, dm_ref*.5, \
+                              embsys.v_fit_domain, embsys.dm_fit_domain, \
+                              embsys.dm_fit_constraint)
     if embsys.fitpot_damp_fac > 0:
         dv *= embsys.fitpot_damp_fac
     return dv + emb.vfit_mf
@@ -784,7 +782,7 @@ def extract_partial_trace(emb, cires, with_env_pot=False):
 
 
 def embs_eri_ao2mo(embs, eri_ao):
-    import junk.dmet_misc
+    import dmet_misc
     c = []
     offsets = [0]
     off = 0
@@ -794,7 +792,7 @@ def embs_eri_ao2mo(embs, eri_ao):
         offsets.append(off)
     c = numpy.array(numpy.hstack(c), order='F')
     offsets = numpy.array(offsets, dtype=numpy.int32)
-    v = junk.dmet_misc.embs_eri_ao2mo_o3(eri_ao, c, offsets)
+    v = dmet_misc.embs_eri_ao2mo_o3(eri_ao, c, offsets)
     for n,emb in enumerate(embs):
         emb._eri = v[n]
     return embs

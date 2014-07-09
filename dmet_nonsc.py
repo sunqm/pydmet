@@ -8,7 +8,6 @@ import pyscf.lib.logger as log
 import pyscf.lib.parameters as param
 from pyscf.lib import _vhf
 from pyscf import ao2mo
-import junk.hf
 import dmet_sc
 
 
@@ -40,7 +39,8 @@ class EmbSys(dmet_sc.EmbSys):
                 log.debug(self, 'vfit_ci of frag %d = %s', m, v_ci_group[m])
                 res = self.frag_fci_solver(mol, emb, emb.vfit_ci)
                 log.debug(self, 'impurity dm of frag %d = %s', m, res['rdm1'])
-        log.info(self, 'e_tot = %.12g, nelec = %g', e_tot, nelec)
+        log.info(self, 'dmet_nonsc.fullsys: e_tot = %.12g, nelec = %g', \
+                 e_tot, nelec)
         return e_tot
 
     def one_shot(self, mol):
@@ -60,7 +60,7 @@ class EmbSys(dmet_sc.EmbSys):
         if self.verbose >= param.VERBOSE_DEBUG:
             log.debug(self, 'vfit_ci = %s', vfit_ci)
             log.debug(self, 'impurity dm = %s', cires['rdm1'])
-        log.info(emb, 'e_tot = %.11g, (+nuc=%.11g)', \
+        log.info(emb, 'dmet_nonsc.one_shot: e_tot = %.11g, (+nuc=%.11g)', \
                  e_tot, e_tot+mol.nuclear_repulsion())
         return e_tot
 

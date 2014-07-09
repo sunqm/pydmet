@@ -341,8 +341,8 @@ if __name__ == '__main__':
 #    print abs(vj1 - vk2).sum()
 #    print numpy.linalg.det(fcidump1['MO_COEFF'])
 
-    mf = RHF(mol, 'C_solid_2x2x2/test2/FCIDUMP.CLUST.GTO',
-             'C_solid_2x2x2/test2/JKDUMP')
+    mf = RHF(mol, 'test/C_solid_2x2x2/test2/FCIDUMP.CLUST.GTO',
+             'test/C_solid_2x2x2/test2/JKDUMP')
     energy = mf.scf()
     print energy
     print mf.mo_energy

@@ -6,20 +6,20 @@ import pyscf.lib.logger as log
 import pyscf.lib.parameters as param
 from pyscf.lib import _vhf
 from pyscf import ao2mo
-import junk.hf
+import dmet_hf
 
 # AO basis of entire system are orthogonal sets
-class OneImp(junk.hf.RHF):
+class OneImp(dmet_hf.RHF):
     def __init__(self, entire_scf, basidx=[]):
         orth_ao = numpy.eye(entire_scf.mo_energy.size)
-        junk.hf.RHF.__init__(self, entire_scf, orth_ao)
+        dmet_hf.RHF.__init__(self, entire_scf, orth_ao)
         self.bas_on_frag = basidx
 
     def init_dmet_scf(self, mol=None):
         effscf = self.entire_scf
         mo_orth = effscf.mo_coeff[:,effscf.mo_occ>1e-15]
         self.imp_site, self.bath_orb, self.env_orb = \
-                junk.hf.decompose_orbital(self, mo_orth, self.bas_on_frag)
+                dmet_hf.decompose_orbital(self, mo_orth, self.bas_on_frag)
         self.impbas_coeff = self.cons_impurity_basis()
 
         self.nelectron = int(effscf.mo_occ.sum()) - self.env_orb.shape[1] * 2

@@ -8,7 +8,6 @@ import numpy
 from pyscf import lib
 from pyscf import ao2mo
 import psi4
-import junk.molpro_fcidump
 
 FCIEXE = os.path.dirname(__file__) + '/fci'
 
@@ -63,12 +62,33 @@ def cc(mol, nelec, h1e, h2e, ptrace, mo):
 
     return res
 
+def _fcidump(fout, nelec, hcore, eri):
+    nmo = hcore.shape[0]
+    fout.write(' &FCI NORB= %3d,NELEC=%2d,MS2= 0,\n' % (nmo, nelec))
+    fout.write('  ORBSYM=%s\n' % ('1,' * nmo))
+    fout.write('  ISYM=1,\n')
+    fout.write(' &END\n')
+
+    ij = 0
+    for i in range(nmo):
+        for j in range(0, i+1):
+            kl = 0
+            for k in range(0, i+1):
+                for l in range(0, k+1):
+                    if ij >= kl:
+                        fout.write(' %.16g%3d%3d%3d%3d\n' \
+                                   % (eri[ij,kl], i+1, j+1, k+1, l+1))
+                    kl += 1
+            ij += 1
+
+    for i in range(nmo):
+        for j in range(0, i+1):
+            fout.write(' %.16g%3d%3d  0  0\n' % (hcore[i,j], i+1, j+1))
+
 def fci(mol, nelec, h1e, h2e, ptrace, mo):
     tmpfile = tempfile.mkstemp()[1]
     with open(tmpfile, 'w') as fout:
-        junk.molpro_fcidump.head(h1e.shape[0], nelec, fout)
-        junk.molpro_fcidump.write_eri_in_molpro_format(h2e, fout)
-        junk.molpro_fcidump.write_hcore_in_molpro_format(h1e, fout)
+        _fcidump(fout, nelec, h1e, h2e)
         fout.write(' 0.0  0  0  0  0\n')
 
     cmd = [FCIEXE,
