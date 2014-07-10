@@ -25,34 +25,56 @@ def scf_energy(h1e_mo, h2e_mo, nocc):
                 ij = i*(i+1)/2+j
             escf += (h2e_mo[ii,jj] - h2e_mo[ij,ij] * .5)
             jk += h2e_mo[ii,jj] - h2e_mo[ij,ij] * .5
-    return escf*2
+    return escf * 2
 
 def cc(mol, nelec, h1e, h2e, ptrace, mo):
     h1e = reduce(numpy.dot, (mo.T, h1e, mo))
+    eri1 = numpy.empty(h2e.size)
+    ij = 0
+    for i in range(h2e.shape[0]):
+        for j in range(i+1):
+            eri1[ij] = h2e[i,j]
+            ij += 1
+    eri = ao2mo.incore.full(eri1, mo)
+    escf = scf_energy(h1e, eri, nelec/2)
 
     ps = psi4.Solver()
     with psi4.capture_stdout():
         nmo = h1e.shape[0]
-        ps.prepare('RHF', numpy.eye(nmo), h1e, h2e, nelec)
+        ps.prepare('RHF', numpy.eye(nmo), h1e, eri, nelec)
         ecc = ps.energy('CCSD')
         rdm1, rdm2 = ps.density()
+        rdm1 *= 2 # Psi4 gives rdm1 of alpha spin
+
+# note the rdm1,rdm2 from psi4 solver EXCLUDES HF contributions
+    for i in range(nelec/2):
+        rdm1[i,i] += 2
+        for j in range(nelec/2):
+            rdm2[i,j,i,j] += 4
+            rdm2[i,j,j,i] +=-2
 
     nmo = mo.shape[1]
     p = numpy.dot(mo[:ptrace,:].T, mo[:ptrace,:])
-    rdm1 = numpy.dot(p, rdm1)
-    e1_ptrace = lib.trace_ab(rdm1.reshape(-1), h1e.reshape(-1))
+    frag_rdm1 = numpy.dot(p, rdm1)
+    e1_ptrace = lib.trace_ab(frag_rdm1.reshape(-1), h1e.reshape(-1))
 
-    rdm2 = numpy.dot(p, rdm2.reshape(nmo,-1))
-    eri1 = numpy.empty(h2e.size)
+    eri_full = numpy.empty((nmo,nmo,nmo,nmo))
     ij = 0
-    for i in range(eri.shape[0]):
+    for i in range(nmo):
         for j in range(i+1):
-            eri1[ij] = eri[i,j]
+            kl = 0
+            for k in range(nmo):
+                for l in range(k+1):
+                    eri_full[i,k,j,l] = \
+                    eri_full[j,k,i,l] = \
+                    eri_full[i,l,j,k] = \
+                    eri_full[j,l,i,k] = eri[ij,kl]
+                    kl += 1
             ij += 1
-    eri = ao2mo.incore.full(eri1, mo)
-    e2_ptrace = lib.trace_ab(rdm2.reshape(-1), eri.reshape(-1))
+    frag_rdm2 = numpy.dot(p, rdm2.reshape(nmo,-1))
+    e2_ptrace = lib.trace_ab(frag_rdm2.reshape(-1), eri_full.reshape(-1))
     e_ptrace = e1_ptrace + e2_ptrace * .5
-    escf = scf_energy(h1e, h2e, nelec/2)
+
     #print ecc, escf
     res = {'rdm1': reduce(numpy.dot, (mo, rdm1, mo.T)),
            #'escf': escf,

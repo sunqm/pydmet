@@ -1,0 +1,684 @@
+
+INFO: **** input file is /home/qimings/workspace/gauss_vasp_12/pydmet/test/test_h10.py ****
+import os, sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+import numpy
+from pyscf import gto
+from pyscf import scf
+import dmet_sc
+
+b1 = 1.0
+nat = 10
+mol = gto.Mole()
+mol.verbose = 5
+mol.output = 'h%s_sz' % nat
+mol.atom = []
+r = b1/2 / numpy.sin(numpy.pi/nat)
+for i in range(nat):
+    theta = i * (2*numpy.pi/nat)
+    mol.atom.append((1, (r*numpy.cos(theta),
+                         r*numpy.sin(theta), 0)))
+
+mol.basis = {'H': 'sto-3g',}
+mol.build()
+mf = scf.RHF(mol)
+print mf.scf()
+
+embsys = dmet_sc.EmbSys(mol, mf)
+embsys.frag_group = [[[0,1],[2,3],[4,5],[6,7],[8,9]], ]
+embsys.max_iter = 10
+print embsys.scdmet(mol)
+
+
+
+import dmet_nonsc
+embsys = dmet_nonsc.EmbSys(mol, mf, [[0,1]])
+print embsys.one_shot(mol)
+
+embsys = dmet_nonsc.EmbSys(mol, mf)
+embsys.frag_group = [[[0,1],[2,3],[4,5],[6,7],[8,9]], ]
+print embsys.fullsys(mol)
+
+
+
+import impsolver
+def ccsolver(mol, emb, v=0):
+    solver = impsolver.use_local_solver(impsolver.cc)
+    return solver(mol, emb, v)
+
+embsys = dmet_nonsc.EmbSys(mol, mf, [[0,1]])
+embsys.frag_fci_solver = ccsolver
+print embsys.one_shot(mol)
+
+embsys = dmet_nonsc.EmbSys(mol, mf)
+embsys.frag_fci_solver = ccsolver
+embsys.frag_group = [[[0,1],[2,3],[4,5],[6,7],[8,9]], ]
+print embsys.fullsys(mol)
+INFO: ******************** input file end ********************
+
+System: ('Linux', 'della4', '2.6.32-431.20.3.el6.x86_64', '#1 SMP Fri Jun 20 19:14:31 EDT 2014', 'x86_64')
+Date: Wed Jul  9 23:31:17 2014
+GIT version: [INPUT] VERBOSE 5
+[INPUT] light speed = 137.0359895
+[INPUT] number of atoms = 10
+[INPUT] num electrons = 10
+[INPUT] atom 1, H,   point nuclear model, mass 1, radial 80, angular 110
+[INPUT]      (1.61803398874989, 0, 0) AA, (3.05764109897489, 0, 0) Bohr
+[INPUT] atom 2, H,   point nuclear model, mass 1, radial 80, angular 110
+[INPUT]      (1.30901699437495, 0.951056516295154, 0) AA, (2.47368361176997, 1.79723634478079, 0) Bohr
+[INPUT] atom 3, H,   point nuclear model, mass 1, radial 80, angular 110
+[INPUT]      (0.5, 1.53884176858763, 0) AA, (0.944863062282531, 2.90798949167194, 0) Bohr
+[INPUT] atom 4, H,   point nuclear model, mass 1, radial 80, angular 110
+[INPUT]      (-0.5, 1.53884176858763, 0) AA, (-0.944863062282531, 2.90798949167194, 0) Bohr
+[INPUT] atom 5, H,   point nuclear model, mass 1, radial 80, angular 110
+[INPUT]      (-1.30901699437495, 0.951056516295154, 0) AA, (-2.47368361176997, 1.79723634478079, 0) Bohr
+[INPUT] atom 6, H,   point nuclear model, mass 1, radial 80, angular 110
+[INPUT]      (-1.61803398874989, 1.98152014523418e-16, 0) AA, (-3.05764109897489, 3.74453038480099e-16, 0) Bohr
+[INPUT] atom 7, H,   point nuclear model, mass 1, radial 80, angular 110
+[INPUT]      (-1.30901699437495, -0.951056516295153, 0) AA, (-2.47368361176998, -1.79723634478079, 0) Bohr
+[INPUT] atom 8, H,   point nuclear model, mass 1, radial 80, angular 110
+[INPUT]      (-0.5, -1.53884176858763, 0) AA, (-0.944863062282531, -2.90798949167194, 0) Bohr
+[INPUT] atom 9, H,   point nuclear model, mass 1, radial 80, angular 110
+[INPUT]      (0.5, -1.53884176858763, 0) AA, (0.94486306228253, -2.90798949167194, 0) Bohr
+[INPUT] atom 10, H,   point nuclear model, mass 1, radial 80, angular 110
+[INPUT]      (1.30901699437495, -0.951056516295154, 0) AA, (2.47368361176997, -1.79723634478079, 0) Bohr
+nuclear repulsion = 12.6321231725525
+[INPUT] basis = atom: (l, kappa, nprim/nctr)
+[INPUT]               (expnt, c_1, c_2, ...)
+[INPUT] H : l = 0, kappa = 0, [3/1]
+[INPUT]    exp = 3.42525, c = 0.154329, 
+[INPUT]    exp = 0.623914, c = 0.535328, 
+[INPUT]    exp = 0.168855, c = 0.444635, 
+[INPUT] 0 set(s) of even-tempered basis
+number of shells = 10
+number of NR pGTOs = 30
+number of NR cGTOs = 10
+bas 0, expnt(s) = [ 3.42525091  0.62391373  0.1688554 ]
+bas 1, expnt(s) = [ 3.42525091  0.62391373  0.1688554 ]
+bas 2, expnt(s) = [ 3.42525091  0.62391373  0.1688554 ]
+bas 3, expnt(s) = [ 3.42525091  0.62391373  0.1688554 ]
+bas 4, expnt(s) = [ 3.42525091  0.62391373  0.1688554 ]
+bas 5, expnt(s) = [ 3.42525091  0.62391373  0.1688554 ]
+bas 6, expnt(s) = [ 3.42525091  0.62391373  0.1688554 ]
+bas 7, expnt(s) = [ 3.42525091  0.62391373  0.1688554 ]
+bas 8, expnt(s) = [ 3.42525091  0.62391373  0.1688554 ]
+bas 9, expnt(s) = [ 3.42525091  0.62391373  0.1688554 ]
+CPU time:         0.28
+arg.atm = [[1, 20, 1, 1, 80, 110], [1, 29, 1, 1, 80, 110], [1, 38, 1, 1, 80, 110], [1, 47, 1, 1, 80, 110], [1, 56, 1, 1, 80, 110], [1, 65, 1, 1, 80, 110], [1, 74, 1, 1, 80, 110], [1, 83, 1, 1, 80, 110], [1, 92, 1, 1, 80, 110], [1, 101, 1, 1, 80, 110]]
+arg.bas = [[0, 0, 3, 1, 0, 23, 26, 0], [1, 0, 3, 1, 0, 32, 35, 0], [2, 0, 3, 1, 0, 41, 44, 0], [3, 0, 3, 1, 0, 50, 53, 0], [4, 0, 3, 1, 0, 59, 62, 0], [5, 0, 3, 1, 0, 68, 71, 0], [6, 0, 3, 1, 0, 77, 80, 0], [7, 0, 3, 1, 0, 86, 89, 0], [8, 0, 3, 1, 0, 95, 98, 0], [9, 0, 3, 1, 0, 104, 107, 0]]
+arg.env = [137.0359895, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3.0576410989748877, 0.0, 0.0, 3.4252509099999999, 0.62391373000000006, 0.16885539999999999, 0.98170674456538454, 0.94946400409685294, 0.29590645297558454, 2.473683611769975, 1.7972363447807893, 0.0, 3.4252509099999999, 0.62391373000000006, 0.16885539999999999, 0.98170674456538454, 0.94946400409685294, 0.29590645297558454, 0.94486306228253114, 2.9079894916719415, 0.0, 3.4252509099999999, 0.62391373000000006, 0.16885539999999999, 0.98170674456538454, 0.94946400409685294, 0.29590645297558454, -0.9448630622825307, 2.9079894916719415, 0.0, 3.4252509099999999, 0.62391373000000006, 0.16885539999999999, 0.98170674456538454, 0.94946400409685294, 0.29590645297558454, -2.4736836117699745, 1.7972363447807895, 0.0, 3.4252509099999999, 0.62391373000000006, 0.16885539999999999, 0.98170674456538454, 0.94946400409685294, 0.29590645297558454, -3.0576410989748877, 3.7445303848009917e-16, 0.0, 3.4252509099999999, 0.62391373000000006, 0.16885539999999999, 0.98170674456538454, 0.94946400409685294, 0.29590645297558454, -2.4736836117699754, -1.7972363447807889, 0.0, 3.4252509099999999, 0.62391373000000006, 0.16885539999999999, 0.98170674456538454, 0.94946400409685294, 0.29590645297558454, -0.94486306228253136, -2.9079894916719415, 0.0, 3.4252509099999999, 0.62391373000000006, 0.16885539999999999, 0.98170674456538454, 0.94946400409685294, 0.29590645297558454, 0.94486306228253036, -2.9079894916719415, 0.0, 3.4252509099999999, 0.62391373000000006, 0.16885539999999999, 0.98170674456538454, 0.94946400409685294, 0.29590645297558454, 2.4736836117699745, -1.79723634478079, 0.0, 3.4252509099999999, 0.62391373000000006, 0.16885539999999999, 0.98170674456538454, 0.94946400409685294, 0.29590645297558454]
+
+
+******** SCF options ********
+method = RHF
+potential = NR RHF Coulomb repulsion
+initial guess = Initial guess in terms of the overlap to minimal basis.
+damping factor = 0
+level shift factor = 0
+DIIS start cycle = 3
+DIIS space = 8
+SCF threshold = 1e-10
+max. SCF cycles = 50
+direct_scf_threshold = 1e-13
+chkfile to save SCF result = /dev/shm/tmpRzJn15
+initial guess from MINAO
+start scf_cycle
+CPU time for vj and vk 0.01 sec
+HOMO = -0.259360233775, LUMO = 0.2206173849,
+  mo_energy = [-0.8814255  -0.65640221 -0.65640221 -0.25936023 -0.25936023  0.22061738
+  0.22061738  0.76389685  0.76389685  1.06795412]
+cycle= 1 E=-17.9788843005535 (+nuc=-5.34676), delta_E= -17.9789
+CPU time:         0.30
+CPU time for vj and vk 0 sec
+HOMO = -0.325772501475, LUMO = 0.299586470851,
+  mo_energy = [-0.72244847 -0.61679529 -0.61679529 -0.3257725  -0.3257725   0.29958647
+  0.29958647  0.85857987  0.85857987  1.16572889]
+cycle= 2 E=-17.8735179731261 (+nuc=-5.24139), delta_E= 0.105366
+CPU time:         0.30
+CPU time for vj and vk 0 sec
+HOMO = -0.325772501475, LUMO = 0.299586470851,
+  mo_energy = [-0.72244847 -0.61679529 -0.61679529 -0.3257725  -0.3257725   0.29958647
+  0.29958647  0.85857987  0.85857987  1.16572889]
+cycle= 3 E=-17.8735179731261 (+nuc=-5.24139), delta_E= -2.84217e-14
+          sum(delta_dm)=5.5525e-14 (~ 2.08521e-13%)
+
+CPU time:         0.30
+CPU time for vj and vk 0 sec
+HOMO = -0.325772501475, LUMO = 0.299586470851,
+  mo_energy = [-0.72244847 -0.61679529 -0.61679529 -0.3257725  -0.3257725   0.29958647
+  0.29958647  0.85857987  0.85857987  1.16572889]
+CPU time:         0.30
+nuclear repulsion = 12.6321231725525
+converged electronic energy = -17.8735179731261
+total molecular energy = -5.24139480057359
+**** MO energy ****
+occupied MO #1 energy= -0.722448472576171 occ= 2
+occupied MO #2 energy= -0.616795291209369 occ= 2
+occupied MO #3 energy= -0.616795291209367 occ= 2
+occupied MO #4 energy= -0.325772501475172 occ= 2
+occupied MO #5 energy= -0.325772501475171 occ= 2
+virtual MO #6 energy= 0.299586470850524 occ= 0
+virtual MO #7 energy= 0.299586470850525 occ= 0
+virtual MO #8 energy= 0.85857987062593 occ= 0
+virtual MO #9 energy= 0.858579870625932 occ= 0
+virtual MO #10 energy= 1.16572889307132 occ= 0
+ ** MO coefficients **
+MO_id+1             #1      #2      #3      #4      #5
+0  H 1s        -0.20441    0.01616    0.33026    0.14559   -0.41425
+1  H 1s        -0.20441    0.20720    0.25769    0.43897    0.01045
+2  H 1s        -0.20441    0.31909    0.08669    0.12571    0.42071
+3  H 1s        -0.20441    0.30911   -0.11742   -0.36128    0.24956
+4  H 1s        -0.20441    0.18105   -0.27669   -0.34899   -0.26648
+5  H 1s        -0.20441   -0.01616   -0.33026    0.14559   -0.41425
+6  H 1s        -0.20441   -0.20720   -0.25769    0.43897    0.01045
+7  H 1s        -0.20441   -0.31909   -0.08669    0.12571    0.42071
+8  H 1s        -0.20441   -0.30911    0.11742   -0.36128    0.24956
+9  H 1s        -0.20441   -0.18105    0.27669   -0.34899   -0.26648
+MO_id+1             #6      #7      #8      #9      #10
+0  H 1s         0.43644   -0.43252   -0.37963   -0.73324   -0.66325
+1  H 1s         0.27648    0.54874   -0.12386    0.81634    0.66325
+2  H 1s        -0.60732    0.09338    0.58004   -0.58763   -0.66325
+3  H 1s         0.09886   -0.60645   -0.81466    0.13446    0.66325
+4  H 1s         0.54622    0.28143    0.73811    0.37006   -0.66325
+5  H 1s        -0.43644    0.43252   -0.37963   -0.73324    0.66325
+6  H 1s        -0.27648   -0.54874   -0.12386    0.81634   -0.66325
+7  H 1s         0.60732   -0.09338    0.58004   -0.58763    0.66325
+8  H 1s        -0.09886    0.60645   -0.81466    0.13446   -0.66325
+9  H 1s        -0.54622   -0.28143    0.73811    0.37006    0.66325
+ ** Mulliken pop (on non-orthogonal input basis)  **
+pop of  0H 1s        1.00000
+pop of  1H 1s        1.00000
+pop of  2H 1s        1.00000
+pop of  3H 1s        1.00000
+pop of  4H 1s        1.00000
+pop of  5H 1s        1.00000
+pop of  6H 1s        1.00000
+pop of  7H 1s        1.00000
+pop of  8H 1s        1.00000
+pop of  9H 1s        1.00000
+ ** Mulliken atomic charges  **
+charge of  0H =      0.00000
+charge of  1H =      0.00000
+charge of  2H =     -0.00000
+charge of  3H =      0.00000
+charge of  4H =      0.00000
+charge of  5H =      0.00000
+charge of  6H =      0.00000
+charge of  7H =      0.00000
+charge of  8H =      0.00000
+charge of  9H =      0.00000
+==== start DMET self-consistency ====
+
+
+******** DMFET/DMET_SC Options *********
+max_iter        = 10
+conv_threshold  = 1e-05
+global_fit_dm   = 1
+v_fit_domain    = 2
+dm_fit_domain   = 2
+dm_fit_constraint = 0
+env_pot_for_fci = 0
+hf_follow_state = 0
+fitpot_damp_fac = 0.6
+with_hopping    = 0
+rand_init       = 0
+orthogonalize AOs with lowdin scheme
+atm_lst of impurity sys: [0, 1]
+extra bas_idx of impurity sys: []
+CPU time for vj and vk 0 sec
+CPU time for vj and vk 0 sec
+CPU time for vj and vk 0 sec
+CPU time for vj and vk 0 sec
+CPU time for vj and vk 0 sec
+fit_chemical_potential for fragment 0
+fit chem potential = -0.0012517708232, nelec error = -1.1832090863e-10
+        ncall = 5, scipy.optimize success: True
+fitting potential =
+fragment 0, [0, 1]
+      -0.00125       0.00000       0.00000       0.00000
+       0.00000      -0.00125       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+DMET-FCI-in-HF of entire system, e_tot = -18.0054156, nelec_tot = 10
+fit_without_local_scf for fragment 0
+dm_ref = [[ 1.          0.63471644 -0.52398924 -0.52491174]
+ [ 0.63471644  1.         -0.52398924  0.52491174]
+ [-0.52398924 -0.52398924  0.37306698  0.        ]
+ [-0.52491174  0.52491174  0.          1.62693302]]
+ddm diag = [ -8.67306227e-13  -8.67195205e-13]
+norm(ddm) = 1.4981318e-11, norm(dv) = 0.031613714, trace_imp(ddm) = -1.7345014e-12
+fitting potential =
+fragment 0, [0, 1]
+      -0.00110       0.01337       0.00000       0.00000
+       0.01337      -0.00110       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+macro iter = 0, e_tot = -18.0054156402, nelec = 10, dv = 0.0190507
+                 delta_e = -18.0054, (~ 100%)
+CPU time 0.41
+SCF for entire molecule with fitting potential
+CPU time for set up embsys.embs: 0.01 sec
+fit_chemical_potential for fragment 0
+fit chem potential = 0.0012712943585, nelec error = -5.3533666389e-10
+        ncall = 5, scipy.optimize success: False
+fitting potential =
+fragment 0, [0, 1]
+       0.00127       0.00000       0.00000       0.00000
+       0.00000       0.00127       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+DMET-FCI-in-HF of entire system, e_tot = -18.0269706, nelec_tot = 10
+fit_without_local_scf for fragment 0
+dm_ref = [[  1.00000000e+00   6.07850440e-01  -5.38494624e-01  -5.39574751e-01]
+ [  6.07850440e-01   1.00000000e+00  -5.38494624e-01   5.39574751e-01]
+ [ -5.38494624e-01  -5.38494624e-01   4.05255547e-01   2.00000000e-14]
+ [ -5.39574751e-01   5.39574751e-01   2.00000000e-14   1.59474445e+00]]
+ddm diag = [  6.12399020e-13   6.12954132e-13]
+norm(ddm) = 9.9490883e-12, norm(dv) = 0.021774971, trace_imp(ddm) = 1.2253532e-12
+fitting potential =
+fragment 0, [0, 1]
+      -0.00029       0.00416       0.00000       0.00000
+       0.00416      -0.00029       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+macro iter = 1, e_tot = -18.026970622, nelec = 10, dv = 0.0135435
+                 delta_e = -0.021555, (~ 0.119571%)
+CPU time 0.51
+SCF for entire molecule with fitting potential
+CPU time for set up embsys.embs: 0.01 sec
+fit_chemical_potential for fragment 0
+fit chem potential = -0.00047912662674, nelec error = 2.040683178e-10
+        ncall = 5, scipy.optimize success: True
+fitting potential =
+fragment 0, [0, 1]
+      -0.00048       0.00000       0.00000       0.00000
+       0.00000      -0.00048       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+DMET-FCI-in-HF of entire system, e_tot = -18.0121094, nelec_tot = 10
+fit_without_local_scf for fragment 0
+dm_ref = [[  1.00000000e+00   6.26551541e-01  -5.28554112e-01  -5.29523277e-01]
+ [  6.26551541e-01   1.00000000e+00  -5.28554112e-01   5.29523277e-01]
+ [ -5.28554112e-01  -5.28554112e-01   3.82829171e-01  -1.00000000e-14]
+ [ -5.29523277e-01   5.29523277e-01  -1.00000000e-14   1.61717083e+00]]
+ddm diag = [ -4.05064871e-13  -4.05175893e-13]
+norm(ddm) = 6.8574886e-12, norm(dv) = 0.014626765, trace_imp(ddm) = -8.1024076e-13
+fitting potential =
+fragment 0, [0, 1]
+      -0.00081       0.01035       0.00000       0.00000
+       0.01035      -0.00081       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+macro iter = 2, e_tot = -18.0121094058, nelec = 10, dv = 0.00911851
+                 delta_e = 0.0148612, (~ 0.0825068%)
+CPU time 0.62
+SCF for entire molecule with fitting potential
+CPU time for set up embsys.embs: 0.01 sec
+fit_chemical_potential for fragment 0
+fit chem potential = 0.0006921373747, nelec error = 1.8869905638e-10
+        ncall = 5, scipy.optimize success: True
+fitting potential =
+fragment 0, [0, 1]
+       0.00069       0.00000       0.00000       0.00000
+       0.00000       0.00069       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+DMET-FCI-in-HF of entire system, e_tot = -18.0221071, nelec_tot = 10
+fit_without_local_scf for fragment 0
+dm_ref = [[ 1.          0.61406483 -0.53526911 -0.53631171]
+ [ 0.61406483  1.         -0.53526911  0.53631171]
+ [-0.53526911 -0.53526911  0.39779392  0.        ]
+ [-0.53631171  0.53631171  0.          1.60220608]]
+ddm diag = [  2.80275803e-13   2.80775403e-13]
+norm(ddm) = 4.6208086e-12, norm(dv) = 0.01002694, trace_imp(ddm) = 5.6105121e-13
+fitting potential =
+fragment 0, [0, 1]
+      -0.00045       0.00611       0.00000       0.00000
+       0.00611      -0.00045       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+macro iter = 3, e_tot = -18.0221071403, nelec = 10, dv = 0.00624003
+                 delta_e = -0.00999773, (~ 0.0554748%)
+CPU time 0.73
+SCF for entire molecule with fitting potential
+CPU time for set up embsys.embs: 0.01 sec
+fit_chemical_potential for fragment 0
+fit chem potential = -0.00011329423887, nelec error = -2.3297812568e-09
+        ncall = 5, scipy.optimize success: False
+fitting potential =
+fragment 0, [0, 1]
+      -0.00011       0.00000       0.00000       0.00000
+       0.00000      -0.00011       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+DMET-FCI-in-HF of entire system, e_tot = -18.0152532, nelec_tot = 10
+fit_without_local_scf for fragment 0
+dm_ref = [[ 1.          0.62266453 -0.53067847 -0.53167022]
+ [ 0.62266453  1.         -0.53067847  0.53167022]
+ [-0.53067847 -0.53067847  0.38748324  0.        ]
+ [-0.53167022  0.53167022  0.          1.61251675]]
+ddm diag = [ -1.88737914e-13  -1.89293026e-13]
+norm(ddm) = 3.1674992e-12, norm(dv) = 0.0067908003, trace_imp(ddm) = -3.7803094e-13
+fitting potential =
+fragment 0, [0, 1]
+      -0.00069       0.00898       0.00000       0.00000
+       0.00898      -0.00069       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+macro iter = 4, e_tot = -18.0152532023, nelec = 10, dv = 0.0042307
+                 delta_e = 0.00685394, (~ 0.0380452%)
+CPU time 0.83
+SCF for entire molecule with fitting potential
+CPU time for set up embsys.embs: 0.02 sec
+fit_chemical_potential for fragment 0
+fit chem potential = 0.00043115703823, nelec error = 2.9453168793e-09
+        ncall = 5, scipy.optimize success: False
+fitting potential =
+fragment 0, [0, 1]
+       0.00043       0.00000       0.00000       0.00000
+       0.00000       0.00043       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+DMET-FCI-in-HF of entire system, e_tot = -18.0198971, nelec_tot = 9.99999999
+fit_without_local_scf for fragment 0
+dm_ref = [[ 1.          0.61685726 -0.5337948  -0.53482076]
+ [ 0.61685726  1.         -0.5337948   0.53482076]
+ [-0.5337948  -0.5337948   0.39444391  0.        ]
+ [-0.53482076  0.53482076  0.          1.60555609]]
+ddm diag = [  1.29340982e-13   1.29174449e-13]
+norm(ddm) = 2.1463428e-12, norm(dv) = 0.0046405903, trace_imp(ddm) = 2.5851543e-13
+fitting potential =
+fragment 0, [0, 1]
+      -0.00052       0.00702       0.00000       0.00000
+       0.00702      -0.00052       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+macro iter = 5, e_tot = -18.0198970934, nelec = 10, dv = 0.00288885
+                 delta_e = -0.00464389, (~ 0.0257709%)
+CPU time 0.94
+SCF for entire molecule with fitting potential
+CPU time for set up embsys.embs: 0.02 sec
+fit_chemical_potential for fragment 0
+fit chem potential = 5.8578440566e-05, nelec error = -8.1146067643e-10
+        ncall = 5, scipy.optimize success: False
+fitting potential =
+fragment 0, [0, 1]
+       0.00006       0.00000       0.00000       0.00000
+       0.00000       0.00006       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+DMET-FCI-in-HF of entire system, e_tot = -18.0167239, nelec_tot = 10
+fit_without_local_scf for fragment 0
+dm_ref = [[ 1.          0.62083408 -0.53166812 -0.53267059]
+ [ 0.62083408  1.         -0.53166812  0.53267059]
+ [-0.53166812 -0.53166812  0.38967632 -0.        ]
+ [-0.53267059  0.53267059 -0.          1.61032368]]
+ddm diag = [ -8.78186412e-14  -8.75965966e-14]
+norm(ddm) = 1.4664617e-12, norm(dv) = 0.0031529954, trace_imp(ddm) = -1.7541524e-13
+fitting potential =
+fragment 0, [0, 1]
+      -0.00063       0.00835       0.00000       0.00000
+       0.00835      -0.00063       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+macro iter = 6, e_tot = -18.0167238619, nelec = 10, dv = 0.0019638
+                 delta_e = 0.00317323, (~ 0.0176127%)
+CPU time 1.04
+SCF for entire molecule with fitting potential
+CPU time for set up embsys.embs: 0.01 sec
+fit_chemical_potential for fragment 0
+fit chem potential = 0.00031149153009, nelec error = -9.5028118707e-10
+        ncall = 5, scipy.optimize success: False
+fitting potential =
+fragment 0, [0, 1]
+       0.00031       0.00000       0.00000       0.00000
+       0.00000       0.00031       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+DMET-FCI-in-HF of entire system, e_tot = -18.0188802, nelec_tot = 10
+fit_without_local_scf for fragment 0
+dm_ref = [[ 1.          0.61813579 -0.53311456 -0.53413294]
+ [ 0.61813579  1.         -0.53311456  0.53413294]
+ [-0.53311456 -0.53311456  0.39291071 -0.        ]
+ [-0.53413294  0.53413294 -0.          1.60708928]]
+ddm diag = [  5.99520433e-14   6.02851102e-14]
+norm(ddm) = 9.9663806e-13, norm(dv) = 0.0021510278, trace_imp(ddm) = 1.2023715e-13
+fitting potential =
+fragment 0, [0, 1]
+      -0.00056       0.00744       0.00000       0.00000
+       0.00744      -0.00056       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+macro iter = 7, e_tot = -18.0188802232, nelec = 10, dv = 0.00133926
+                 delta_e = -0.00215636, (~ 0.0119672%)
+CPU time 1.15
+SCF for entire molecule with fitting potential
+CPU time for set up embsys.embs: 0.01 sec
+fit_chemical_potential for fragment 0
+fit chem potential = 0.00013884072523, nelec error = 1.2619638667e-10
+        ncall = 5, scipy.optimize success: True
+fitting potential =
+fragment 0, [0, 1]
+       0.00014       0.00000       0.00000       0.00000
+       0.00000       0.00014       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+DMET-FCI-in-HF of entire system, e_tot = -18.0174092, nelec_tot = 10
+fit_without_local_scf for fragment 0
+dm_ref = [[ 1.          0.61997838 -0.53212842 -0.53313593]
+ [ 0.61997838  1.         -0.53212842  0.53313593]
+ [-0.53212842 -0.53212842  0.39070183 -0.        ]
+ [-0.53313593  0.53313593 -0.          1.60929817]]
+ddm diag = [ -4.05786516e-14  -4.05786516e-14]
+norm(ddm) = 6.8031214e-13, norm(dv) = 0.0014635044, trace_imp(ddm) = -8.1157303e-14
+fitting potential =
+fragment 0, [0, 1]
+      -0.00061       0.00806       0.00000       0.00000
+       0.00806      -0.00061       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+macro iter = 8, e_tot = -18.0174091928, nelec = 10, dv = 0.000911417
+                 delta_e = 0.00147103, (~ 0.00816449%)
+CPU time 1.25
+SCF for entire molecule with fitting potential
+CPU time for set up embsys.embs: 0.01 sec
+fit_chemical_potential for fragment 0
+fit chem potential = 0.00025625841353, nelec error = -2.9554136916e-10
+        ncall = 5, scipy.optimize success: False
+fitting potential =
+fragment 0, [0, 1]
+       0.00026       0.00000       0.00000       0.00000
+       0.00000       0.00026       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+DMET-FCI-in-HF of entire system, e_tot = -18.0184101, nelec_tot = 10
+fit_without_local_scf for fragment 0
+dm_ref = [[ 1.          0.61872554 -0.53279968 -0.53381458]
+ [ 0.61872554  1.         -0.53279968  0.53381458]
+ [-0.53279968 -0.53279968  0.39220364 -0.        ]
+ [-0.53381458  0.53381458 -0.          1.60779636]]
+ddm diag = [  2.78665979e-14   2.74225087e-14]
+norm(ddm) = 4.6224299e-13, norm(dv) = 0.00099760134, trace_imp(ddm) = 5.5289107e-14
+fitting potential =
+fragment 0, [0, 1]
+      -0.00057       0.00764       0.00000       0.00000
+       0.00764      -0.00057       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+macro iter = 9, e_tot = -18.0184101027, nelec = 10, dv = 0.000621167
+                 delta_e = -0.00100091, (~ 0.00555493%)
+CPU time 1.35
+SCF for entire molecule with fitting potential
+CPU time for set up embsys.embs: 0.01 sec
+====================
+vfit_mf of frag 0 = [[-0.00057327  0.00763965  0.          0.        ]
+ [ 0.00763965 -0.00057327  0.          0.        ]
+ [ 0.          0.          0.          0.        ]
+ [ 0.          0.          0.          0.        ]]
+vfit_ci of frag 0 = [[ 0.00025626  0.          0.          0.        ]
+ [ 0.          0.00025626  0.          0.        ]
+ [ 0.          0.          0.          0.        ]
+ [ 0.          0.          0.          0.        ]]
+mean-field V_fitting in orth AO representation
+      -0.00057       0.00764       0.00000       0.00000       0.00000       0.00000       0.00000       0.00000       0.00000       0.00000
+       0.00764      -0.00057       0.00000       0.00000       0.00000       0.00000       0.00000       0.00000       0.00000       0.00000
+       0.00000       0.00000      -0.00057       0.00764       0.00000       0.00000       0.00000       0.00000       0.00000       0.00000
+       0.00000       0.00000       0.00764      -0.00057       0.00000       0.00000       0.00000       0.00000       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000      -0.00057       0.00764       0.00000       0.00000       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000       0.00764      -0.00057       0.00000       0.00000       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000       0.00000       0.00000      -0.00057       0.00764       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000       0.00000       0.00000       0.00764      -0.00057       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000       0.00000       0.00000       0.00000       0.00000      -0.00057       0.00764
+       0.00000       0.00000       0.00000       0.00000       0.00000       0.00000       0.00000       0.00000       0.00764      -0.00057
+** mo_coeff of MF sys (on orthogonal AO) **
+0  H 1s        -0.31623    0.43375    0.10890    0.44522    0.04219   -0.28188    0.34719    0.06181   -0.44292   -0.31623
+1  H 1s        -0.31623    0.41266   -0.17237    0.15152   -0.42076   -0.26624   -0.35933    0.21557    0.39183    0.31623
+2  H 1s        -0.31623    0.23760   -0.37887   -0.33539   -0.29583    0.43212   -0.11519   -0.40214   -0.19566   -0.31623
+3  H 1s        -0.31623   -0.03641   -0.44573   -0.36990    0.25134    0.00418    0.44719    0.43926   -0.08394    0.31623
+4  H 1s        -0.31623   -0.28691   -0.34305    0.09745    0.43647   -0.41730   -0.16080   -0.31035    0.32200   -0.31623
+5  H 1s        -0.31623   -0.43516   -0.10311    0.44699    0.01408    0.25947   -0.36425    0.05591   -0.44371    0.31623
+6  H 1s        -0.31623   -0.41492    0.16685    0.17771   -0.41039    0.24309    0.37538    0.21034    0.39466   -0.31623
+7  H 1s        -0.31623   -0.23254    0.38200   -0.35335   -0.27413   -0.42401    0.14217   -0.40471   -0.19028    0.31623
+8  H 1s        -0.31623    0.03047    0.44617   -0.38499    0.22756    0.02398   -0.44657    0.44034   -0.07808   -0.31623
+9  H 1s        -0.31623    0.29145    0.33920    0.12474    0.42947    0.42660    0.13421   -0.30603    0.32610    0.31623
+** mo_coeff of MF sys (on non-orthogonal AO) **
+0  H 1s        -0.20441    0.31993    0.08372    0.43679    0.04694   -0.38290    0.48037    0.11085   -0.81819   -0.66325
+1  H 1s        -0.20441    0.30386   -0.13049    0.14363   -0.41515   -0.36126   -0.49685    0.39511    0.72499    0.66325
+2  H 1s        -0.20441    0.17848   -0.27840   -0.32578   -0.29471    0.59213   -0.16356   -0.74389   -0.35826   -0.66325
+3  H 1s        -0.20441   -0.03021   -0.32932   -0.36022    0.25144    0.00023    0.61430    0.81160   -0.15174    0.66325
+4  H 1s        -0.20441   -0.20962   -0.25578    0.09033    0.42991   -0.57518   -0.21572   -0.57060    0.59677   -0.66325
+5  H 1s        -0.20441   -0.32253   -0.07303    0.43922    0.00831    0.36090   -0.49712    0.10649   -0.81877    0.66325
+6  H 1s        -0.20441   -0.30803    0.12032    0.17961   -0.40090    0.33853    0.51261    0.39124    0.72709   -0.66325
+7  H 1s        -0.20441   -0.16913    0.28418   -0.35045   -0.26489   -0.58417    0.19005   -0.74579   -0.35429    0.66325
+8  H 1s        -0.20441    0.01924    0.33014   -0.38096    0.21876    0.02742   -0.61369    0.81240   -0.14741   -0.66325
+9  H 1s        -0.20441    0.21801    0.24867    0.12782    0.42029    0.58431    0.18962   -0.56741    0.59981    0.66325
+DMET-FCI-in-HF of entire system, e_tot = -18.0172149, nelec_tot = 9.99957189
+macro iter = X, e_tot = -18.017214901, +nuc = -5.3850917281, nelec = 9.9995719
+==== one-shot ====
+orthogonalize AOs with lowdin scheme
+atm_lst of impurity sys: [0, 1]
+extra bas_idx of impurity sys: []
+CPU time for vj and vk 0 sec
+CPU time for vj and vk 0 sec
+CPU time for vj and vk 0 sec
+CPU time for vj and vk 0 sec
+CPU time for vj and vk 0 sec
+fit chem potential = -0.0012517708232, nelec error = -1.1832090863e-10
+        ncall = 5, scipy.optimize success: True
+====================
+vfit_ci = [[-0.00125177  0.          0.          0.        ]
+ [ 0.         -0.00125177  0.          0.        ]
+ [ 0.          0.          0.          0.        ]
+ [ 0.          0.          0.          0.        ]]
+impurity dm = [[ 1.          0.63471644 -0.52398924 -0.52491174]
+ [ 0.63471644  1.         -0.52398924  0.52491174]
+ [-0.52398924 -0.52398924  0.37306698  0.        ]
+ [-0.52491174  0.52491174  0.          1.62693302]]
+dmet_nonsc.one_shot: e_tot = -17.912887125, (+nuc=-5.2807639524)
+==== fullsys ====
+
+
+******** DMFET/DMET_SC Options *********
+max_iter        = 1
+conv_threshold  = 1e-05
+global_fit_dm   = 1
+v_fit_domain    = 2
+dm_fit_domain   = 2
+dm_fit_constraint = 0
+env_pot_for_fci = 0
+hf_follow_state = 0
+fitpot_damp_fac = 0.6
+with_hopping    = 0
+rand_init       = 0
+orthogonalize AOs with lowdin scheme
+atm_lst of impurity sys: [0, 1]
+extra bas_idx of impurity sys: []
+CPU time for vj and vk 0 sec
+CPU time for vj and vk 0 sec
+CPU time for vj and vk 0 sec
+CPU time for vj and vk 0 sec
+CPU time for vj and vk 0 sec
+fit_chemical_potential for fragment 0
+fit chem potential = -0.0012517708232, nelec error = -1.1832090863e-10
+        ncall = 5, scipy.optimize success: True
+fitting potential =
+fragment 0, [0, 1]
+      -0.00125       0.00000       0.00000       0.00000
+       0.00000      -0.00125       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+DMET-FCI-in-HF of entire system, e_tot = -18.0054156, nelec_tot = 10
+====================
+vfit_ci of frag 0 = [[-0.00125177  0.          0.          0.        ]
+ [ 0.         -0.00125177  0.          0.        ]
+ [ 0.          0.          0.          0.        ]
+ [ 0.          0.          0.          0.        ]]
+impurity dm of frag 0 = [[ 1.          0.63471644 -0.52398924 -0.52491174]
+ [ 0.63471644  1.         -0.52398924  0.52491174]
+ [-0.52398924 -0.52398924  0.37306698  0.        ]
+ [-0.52491174  0.52491174  0.          1.62693302]]
+dmet_nonsc.fullsys: e_tot = -18.0054156402, nelec = 10
+==== one-shot ====
+orthogonalize AOs with lowdin scheme
+atm_lst of impurity sys: [0, 1]
+extra bas_idx of impurity sys: []
+CPU time for vj and vk 0 sec
+CPU time for vj and vk 0 sec
+CPU time for vj and vk 0 sec
+CPU time for vj and vk 0 sec
+CPU time for vj and vk 0 sec
+fit chem potential = -0.094142914636, nelec error = 4.2719187077e-08
+        ncall = 5, scipy.optimize success: False
+====================
+vfit_ci = [[-0.09414291  0.          0.          0.        ]
+ [ 0.         -0.09414291  0.          0.        ]
+ [ 0.          0.          0.          0.        ]
+ [ 0.          0.          0.          0.        ]]
+impurity dm = [[  9.99999979e-01   6.34811709e-01  -5.24142198e-01  -5.24428718e-01]
+ [  6.34811709e-01   9.99999979e-01  -5.24142198e-01   5.24428718e-01]
+ [ -5.24407983e-01  -5.24407983e-01   3.73006419e-01   1.93233370e-15]
+ [ -5.24764232e-01   5.24764232e-01   1.93414599e-15   1.62699362e+00]]
+dmet_nonsc.one_shot: e_tot = -18.09862569, (+nuc=-5.4665025173)
+==== fullsys ====
+
+
+******** DMFET/DMET_SC Options *********
+max_iter        = 1
+conv_threshold  = 1e-05
+global_fit_dm   = 1
+v_fit_domain    = 2
+dm_fit_domain   = 2
+dm_fit_constraint = 0
+env_pot_for_fci = 0
+hf_follow_state = 0
+fitpot_damp_fac = 0.6
+with_hopping    = 0
+rand_init       = 0
+orthogonalize AOs with lowdin scheme
+atm_lst of impurity sys: [0, 1]
+extra bas_idx of impurity sys: []
+CPU time for vj and vk 0 sec
+CPU time for vj and vk 0 sec
+CPU time for vj and vk 0 sec
+CPU time for vj and vk 0 sec
+CPU time for vj and vk 0 sec
+fit_chemical_potential for fragment 0
+fit chem potential = -0.094142914636, nelec error = 4.2719187077e-08
+        ncall = 5, scipy.optimize success: False
+fitting potential =
+fragment 0, [0, 1]
+      -0.09414       0.00000       0.00000       0.00000
+       0.00000      -0.09414       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+       0.00000       0.00000       0.00000       0.00000
+DMET-FCI-in-HF of entire system, e_tot = -18.0047964, nelec_tot = 9.99999979
+====================
+vfit_ci of frag 0 = [[-0.09414291  0.          0.          0.        ]
+ [ 0.         -0.09414291  0.          0.        ]
+ [ 0.          0.          0.          0.        ]
+ [ 0.          0.          0.          0.        ]]
+impurity dm of frag 0 = [[  9.99999979e-01   6.34811709e-01  -5.24142198e-01  -5.24428718e-01]
+ [  6.34811709e-01   9.99999979e-01  -5.24142198e-01   5.24428718e-01]
+ [ -5.24407983e-01  -5.24407983e-01   3.73006419e-01   1.93233370e-15]
+ [ -5.24764232e-01   5.24764232e-01   1.93414599e-15   1.62699362e+00]]
+dmet_nonsc.fullsys: e_tot = -18.0047963791, nelec = 10

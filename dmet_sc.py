@@ -80,7 +80,7 @@ class EmbSys(object):
         self.hf_follow_state     = False
 # if > 0, scale the fitting potential, it helps convergence when
 # local_vfit_method is fit_pot_without_local_scf
-        self.fitpot_damp_fac  = .5
+        self.fitpot_damp_fac  = .6
 # when vfit covers imp+bath, with_hopping=true will transform the
 # imp-bath off-diagonal block to the global potential 
         self.with_hopping     = False
@@ -126,10 +126,6 @@ class EmbSys(object):
 
 
     def init_embsys(self, mol):
-        if self.orth_coeff is None:
-            self.orth_coeff = dmet_hf.orthogonalize_ao(mol, self.entire_scf, \
-                                                       self.pre_orth_ao(mol), \
-                                                       self.orth_ao_method)
         #self.basidx_group = map_frag_to_bas_idx(mol, self.frag_group)
         self.all_frags, self.uniq_frags = \
                 self.gen_frag_looper(mol, self.frag_group, self.basidx_group)
@@ -161,6 +157,7 @@ class EmbSys(object):
             v_group = v0_group
 
         embs = self.init_embs(mol, self.entire_scf, self.orth_coeff)
+        self.orth_coeff = embs[0].orth_coeff
         embs = self.update_embs_vfit_ci(mol, embs, v0_group)
         embs = self.update_embs_vfit_mf(mol, embs, v_group)
         self.embs = embs
@@ -169,23 +166,49 @@ class EmbSys(object):
     def init_embs(self, mol, entire_scf, orth_coeff):
         embs = []
         for m, atm_lst, bas_idx in self.uniq_frags:
-            emb = self.OneImp(entire_scf, orth_ao=orth_coeff)
+            emb = self.OneImp(entire_scf)
             emb.occ_env_cutoff = 1e-14
             emb.imp_atoms = atm_lst
             emb.bas_on_frag = bas_idx
-            emb.verbose = self.emb_verbose
+            emb.pre_orth_ao = self.pre_orth_ao
+            emb.orth_ao_method = self.orth_ao_method
+            emb.verbose = 4#self.emb_verbose
             embs.append(emb)
-        embs = self.update_embs(mol, embs, entire_scf)
+
+        if self.orth_coeff is None:
+            orth_coeff = embs[0].get_orth_ao(mol)
+        else:
+            orth_coeff = self.orth_coeff
+        for emb in embs:
+            emb.orth_coeff = orth_coeff
+
+        embs = self.update_embs(mol, embs, entire_scf, orth_coeff)
+
         for emb in embs:
             emb.vfit_mf = numpy.zeros_like(emb._vhf_env)
             emb.vfit_ci = numpy.zeros_like(emb._vhf_env)
         return embs
 
     # update the embs in terms of the given entire_scf
-    def update_embs(self, mol, embs, eff_scf):
+    def update_embs(self, mol, embs, eff_scf, orth_coeff=None):
+
+# local SCF in case entire_scf does not converge?
+        for emb in embs:
+            emb.imp_scf()
+        hcore = self.entire_scf.get_hcore(mol)
+        for emb in embs:
+            emb._pure_hcore = emb.mat_ao2impbas(hcore)
+        return embs
+
+# * If entire_scf is converged, the embedding HF results can be projected from
+# entire_scf as follows.
+# * vaspimp.OneImpNI cannot use the enitre_scf results, since the 2e parts are
+# screened.
+        if orth_coeff is None:
+            orth_coeff = self.orth_coeff
         t0 = time.clock()
         sc = numpy.dot(eff_scf.get_ovlp(mol),eff_scf.mo_coeff)
-        c_inv = numpy.dot(eff_scf.get_ovlp(mol),self.orth_coeff).T
+        c_inv = numpy.dot(eff_scf.get_ovlp(mol), orth_coeff).T
         fock0 = numpy.dot(sc*eff_scf.mo_energy, sc.T.conj())
         hcore = eff_scf.get_hcore(mol)
         for ifrag, emb in enumerate(embs):
@@ -216,10 +239,6 @@ class EmbSys(object):
         else:
             for emb in self.embs:
                 emb._eri = emb.eri_on_impbas(mol)
-
-# local SCF in case the bath block of vfit_mf =/= 0?
-#        for emb in embs:
-#            emb.imp_scf()
 
         log.debug(self, 'CPU time for set up embsys.embs: %.8g sec', \
                   time.clock()-t0)
@@ -352,7 +371,7 @@ class EmbSys(object):
 #?        return self
 
     def _get_bas_off_frags(self):
-        nao = self.orth_coeff.shape[1]
+        nao = self.entire_scf.mo_coeff.shape[1]
         baslst = numpy.ones(nao, dtype=bool)
         for m, atm_lst, bas_idx in self.all_frags:
             baslst[bas_idx] = False
@@ -371,7 +390,7 @@ class EmbSys(object):
             v_global = self.assemble_to_blockmat(mol, v_group)
 
         h1e = reduce(numpy.dot, (self.orth_coeff.T, \
-                                 scf.entire_scf.get_hcore(mol), \
+                                 self.entire_scf.get_hcore(mol), \
                                  self.orth_coeff)) + v_global
         h1e = h1e[self.bas_off_frags]
         dm_ao = reduce(numpy.dot, (self.orth_coeff,dm_mf,self.orth_coeff.T))
@@ -603,13 +622,20 @@ def fit_chemical_potential(mol, emb, embsys):
         vmat = numpy.eye(nimp) * v
         cires = embsys.frag_fci_solver(mol, emb, vmat)
         dm = cires['rdm1']
-        return abs(nelec_frag - dm[:nimp].trace())
+        #print 'ddm ',nelec_frag - dm[:nimp].trace()
+        return nelec_frag - dm[:nimp].trace()
     chem_pot0 = emb.vfit_ci[0,0]
-    chem_pot = scipy.optimize.leastsq(nelec_diff, chem_pot0, ftol=1e-5)[0]
+#OPTIMIZE ME, approximate chemical potential
+    sol = scipy.optimize.root(nelec_diff, chem_pot0, tol=1e-3, \
+                              method='lm', options={'ftol':1e-3, 'maxiter':4})
     nemb = emb.impbas_coeff.shape[1]
     vmat = numpy.zeros((nemb,nemb))
     for i in range(nimp):
-        vmat[i,i] = chem_pot
+        vmat[i,i] = sol.x
+    log.debug(embsys, 'fit chem potential = %.11g, nelec error = %.11g', \
+              sol.x, sol.fun)
+    log.debug(embsys, '        ncall = %d, scipy.optimize success: %s', \
+              sol.nfev, sol.success)
     return vmat
 
 

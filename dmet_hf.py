@@ -309,10 +309,10 @@ class RHF(scf.hf.RHF):
 
 #ABORT        self.set_bath_orth_by_svd()
         if orth_ao is None:
-            self.set_ao_with_input_basis()
+            self.pre_orth_ao = lambda mol: numpy.eye(mol.num_NR_function()) # self.set_ao_with_input_basis()
             #self.set_ao_with_atm_scf()
             #self.set_ao_with_projected_ano()
-            self.init_with_lowdin_ao()
+            self.orth_ao_method = 'meta_lowdin' #self.init_with_lowdin_ao()
             #self.init_with_meta_lowdin_ao()
             self.orth_coeff = None
         else:
@@ -341,6 +341,7 @@ class RHF(scf.hf.RHF):
         self.direct_scf = True
         self.direct_scf_threshold = 1e-13
         self._eri = None
+        self.energy_by_env = 0
 
     def dump_options(self):
         log.info(self, '\n')
@@ -393,8 +394,7 @@ class RHF(scf.hf.RHF):
     def init_dmet_scf(self, mol=None):
         if mol is None:
             mol = self.mol
-        if self.orth_coeff is None:
-            self.orth_coeff = self.get_orth_ao(mol)
+        self.orth_coeff = self.get_orth_ao(mol)
         self.release_eri()
         self.bas_on_frag = select_ao_on_fragment(mol, self.imp_atoms, \
                                                  self.imp_basidx)
@@ -570,8 +570,7 @@ environment two-electron part'''
         return e.real, nelec_frag.real
 
     def imp_scf(self):
-        if self.orth_coeff is None:
-            self.orth_coeff = self.get_orth_ao(self.mol)
+        self.orth_coeff = self.get_orth_ao(self.mol)
 
         self.dump_options()
         self.init_dmet_scf(self.mol)
@@ -717,9 +716,12 @@ environment two-electron part'''
 ##################################################
 
     def get_orth_ao(self, mol):
-        return orthogonalize_ao(mol, self.entire_scf, \
-                                self.pre_orth_ao(mol), \
-                                self.orth_ao_method)
+        if self.orth_coeff is None:
+            return orthogonalize_ao(mol, self.entire_scf, \
+                                    self.pre_orth_ao(mol), \
+                                    self.orth_ao_method)
+        else:
+            return self.orth_coeff
 
     def init_with_lowdin_ao(self):
         self.orth_ao_method = 'lowdin'
@@ -972,8 +974,7 @@ class UHF(RHF, scf.hf.UHF):
         return impbas_coeff
 
     def init_dmet_scf(self, mol):
-        if self.orth_coeff is None:
-            self.orth_coeff = self.get_orth_ao(mol)
+        self.orth_coeff = self.get_orth_ao(mol)
         self.bas_on_frag = select_ao_on_fragment(mol, self.imp_atoms, \
                                                  self.imp_basidx)
         c_inv = numpy.dot(self.orth_coeff.T, self.entire_scf.get_ovlp(self.mol)[0])
@@ -1159,8 +1160,7 @@ class UHF(RHF, scf.hf.UHF):
         return scf_diis
 
     def imp_scf(self):
-        if self.orth_coeff is None:
-            self.orth_coeff = self.get_orth_ao(self.mol)
+        self.orth_coeff = self.get_orth_ao(self.mol)
 
         self.dump_options()
         self.init_dmet_scf(self.mol)

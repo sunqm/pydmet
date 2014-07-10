@@ -10,14 +10,14 @@ import dmet_hf
 
 # AO basis of entire system are orthogonal sets
 class OneImp(dmet_hf.RHF):
-    def __init__(self, entire_scf, basidx=[]):
-        orth_ao = numpy.eye(entire_scf.mo_energy.size)
-        dmet_hf.RHF.__init__(self, entire_scf, orth_ao)
+    def __init__(self, entire_scf, basidx=[], orth_ao=None):
+        dmet_hf.RHF.__init__(self, entire_scf)
         self.bas_on_frag = basidx
 
     def init_dmet_scf(self, mol=None):
         effscf = self.entire_scf
-        mo_orth = effscf.mo_coeff[:,effscf.mo_occ>1e-15]
+        c_inv = numpy.dot(self.orth_coeff.T, self.entire_scf.get_ovlp(mol))
+        mo_orth = numpy.dot(c_inv, effscf.mo_coeff[:,effscf.mo_occ>1e-15])
         self.imp_site, self.bath_orb, self.env_orb = \
                 dmet_hf.decompose_orbital(self, mo_orth, self.bas_on_frag)
         self.impbas_coeff = self.cons_impurity_basis()
@@ -27,31 +27,23 @@ class OneImp(dmet_hf.RHF):
                  self.nelectron)
         self._vhf_env = self.init_vhf_env(mol, self.env_orb)
 
-class OneImpNI(OneImp):
-    '''Non-interacting DMET'''
-    def __init__(self, entire_scf, basidx=[]):
-        OneImp.__init__(self, entire_scf, basidx)
+    def get_orth_ao(self, mol):
+        s = self.entire_scf.get_ovlp(mol)
+        if abs(s-numpy.eye(s.shape[0])).sum() < 1e-12:
+            return numpy.eye(self.entire_scf.mo_energy.size)
+        else:
+            return dmet_hf.RHF.get_orth_ao(self, mol)
 
-    def get_hcore(self, mol=None):
-        nimp = len(self.bas_on_frag)
-        effscf = self.entire_scf
-        sc = reduce(numpy.dot, (self.impbas_coeff.T, \
-                                self.entire_scf.get_ovlp(), effscf.mo_coeff))
-        fock = numpy.dot(sc*effscf.mo_energy, sc.T)
-        dmimp = effscf.calc_den_mat(mo_coeff=sc)
-        dm = numpy.zeros_like(fock)
-        dm[:nimp,:nimp] = dmimp[:nimp,:nimp]
-        h1e = fock - self.get_eff_potential(mol, dm)
-        return h1e
+class OneImpNaiveNI(OneImp):
+    '''Non-interacting DMET'''
+    def __init__(self, entire_scf, basidx=[], orth_ao=None):
+        OneImp.__init__(self, entire_scf, basidx)
 
     def eri_on_impbas(self, mol):
         nimp = len(self.bas_on_frag)
         nemb = self.impbas_coeff.shape[1]
         mo = self.impbas_coeff[:,:nimp].copy('F')
-        if self.entire_scf._eri is not None:
-            eri = ao2mo.incore.full(self.entire_scf._eri, mo)
-        else:
-            eri = ao2mo.direct.full_iofree(self.entire_scf._eri, mo)
+        eri = ao2mo.incore.full(self.entire_scf._eri, mo)
         npair = nemb*(nemb+1) / 2
         #eri_mo = numpy.zeros(npair*(npair+1)/2)
         npair_imp = nimp*(nimp+1) / 2
@@ -68,3 +60,16 @@ class OneImpNI(OneImp):
         vhf = vj - vk * .5
         return vhf
 
+
+class OneImpNI(OneImpNaiveNI):
+    def get_hcore(self, mol=None):
+        nimp = len(self.bas_on_frag)
+        effscf = self.entire_scf
+        sc = reduce(numpy.dot, (self.impbas_coeff.T, \
+                                self.entire_scf.get_ovlp(), effscf.mo_coeff))
+        fock = numpy.dot(sc*effscf.mo_energy, sc.T)
+        dmimp = effscf.calc_den_mat(mo_coeff=sc)
+        dm = numpy.zeros_like(fock)
+        dm[:nimp,:nimp] = dmimp[:nimp,:nimp]
+        h1e = fock - self.get_eff_potential(mol, dm)
+        return h1e
