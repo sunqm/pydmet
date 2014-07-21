@@ -5,29 +5,42 @@ import tempfile
 import commands
 import numpy
 
+from pyscf import gto
+from pyscf import scf
 from pyscf import lib
+from pyscf.lib import _vhf
 from pyscf import ao2mo
 import psi4
 
 FCIEXE = os.path.dirname(__file__) + '/fci'
 
-def scf_energy(h1e_mo, h2e_mo, nocc):
-    escf = 0
-    jk = 0
-    for i in range(nocc):
-        escf += h1e_mo[i,i]
-        ii = i*(i+1)/2 + i
-        for j in range(nocc):
-            jj = j*(j+1)/2 + j
-            if i < j:
-                ij = j*(j+1)/2+i
-            else:
-                ij = i*(i+1)/2+j
-            escf += (h2e_mo[ii,jj] - h2e_mo[ij,ij] * .5)
-            jk += h2e_mo[ii,jj] - h2e_mo[ij,ij] * .5
-    return escf * 2
+def _scf_energy(h1e, h2e, mo, nocc):
+    mol = gto.Mole()
+    mol.verbose = 0
+    mol.output = '/dev/null'
+    mol.build(False, False)
+    mf = scf.RHF(mol)
+    mf.init_guess_method = \
+            lambda mol: (0, numpy.dot(mo[:,:nocc],mo[:,:nocc].T)*2)
+    mf.get_hcore = lambda mol: h1e
+    mf.get_ovlp = lambda mol: numpy.eye(mo.shape[1])
+    def _set_mo_occ(mo_energy, mo_coeff=None):
+        mo_occ = numpy.zeros_like(mo_energy)
+        mo_occ[:nocc] = 2
+        return mo_occ
+    mf.set_mo_occ = _set_mo_occ
+    def _get_eff_potential(mol, dm, dm_last=0, vhf_last=0):
+        vj, vk = _vhf.vhf_jk_incore_o2(h2e, dm)
+        return vj - vk * .5
+    mf.get_eff_potential = _get_eff_potential
+
+    scf_conv, hf_energy, mo_energy, mo_occ, mo_coeff \
+            = mf.scf_cycle(mol, 1e-9)
+    return hf_energy, mo_energy, mo_occ, mo_coeff
 
 def cc(mol, nelec, h1e, h2e, ptrace, mo):
+    hf_energy, mo_energy, mo_occ, mo = \
+            _scf_energy(h1e, h2e, mo, nelec/2)
     h1e = reduce(numpy.dot, (mo.T, h1e, mo))
     eri1 = numpy.empty(h2e.size)
     ij = 0
@@ -36,7 +49,6 @@ def cc(mol, nelec, h1e, h2e, ptrace, mo):
             eri1[ij] = h2e[i,j]
             ij += 1
     eri = ao2mo.incore.full(eri1, mo)
-    escf = scf_energy(h1e, eri, nelec/2)
 
     ps = psi4.Solver()
     with psi4.capture_stdout():
@@ -75,10 +87,10 @@ def cc(mol, nelec, h1e, h2e, ptrace, mo):
     e2_ptrace = lib.trace_ab(frag_rdm2.reshape(-1), eri_full.reshape(-1))
     e_ptrace = e1_ptrace + e2_ptrace * .5
 
-    #print ecc, escf
+    #print ecc, hf_energy
     res = {'rdm1': reduce(numpy.dot, (mo, rdm1, mo.T)),
-           #'escf': escf,
-           'etot': ecc+escf,
+           #'escf': hf_energy,
+           'etot': ecc+hf_energy,
            'e1frag': e1_ptrace,
            'e2frag': e2_ptrace*.5}
 

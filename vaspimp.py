@@ -53,12 +53,12 @@ class OneImpNaiveNI(OneImp):
         eri_mo[:npair_imp,:npair_imp] = eri
         return eri_mo
 
-    def get_eff_potential(self, mol, dm, dm_last=0, vhf_last=0):
-        if self._eri is None:
-            self._eri = self.eri_on_impbas(mol)
-        vj, vk = _vhf.vhf_jk_incore_o2(self._eri, dm)
-        vhf = vj - vk * .5
-        return vhf
+#    def get_eff_potential(self, mol, dm, dm_last=0, vhf_last=0):
+#        if self._eri is None:
+#            self._eri = self.eri_on_impbas(mol)
+#        vj, vk = _vhf.vhf_jk_incore_o2(self._eri, dm)
+#        vhf = vj - vk * .5
+#        return vhf
 
 
 class OneImpNI(OneImpNaiveNI):

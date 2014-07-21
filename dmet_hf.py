@@ -10,6 +10,7 @@ import gto
 from pyscf import scf
 from pyscf.scf import atom_hf
 from pyscf import lib
+from pyscf.lib import _vhf
 import pyscf.lib.parameters as param
 import pyscf.lib.logger as log
 import pyscf.lib.pycint as pycint
@@ -504,21 +505,19 @@ class RHF(scf.hf.RHF):
     def release_eri(self):
         self._eri = None
 
-#    def dot_eri_dm(self, mol, dm):
-#        if self._eri is None:
-#            self._eri = self.eri_on_impbas(mol)
-#        return scf._vhf.vhf_jk_o2(self._eri, dm)
-#
-#    def get_eff_potential(self, mol, dm, dm_last=0, vhf_last=0):
-#        vj, vk = self.dot_eri_dm(mol, dm)
-#        vhf = vj - vk * .5
-#        return vhf
 
     def get_eff_potential(self, mol, dm, dm_last=0, vhf_last=0):
-        dm = reduce(numpy.dot, (self.impbas_coeff, dm, \
-                                self.impbas_coeff.T))
-        vhf_ao = scf.hf.RHF.get_eff_potential(self.entire_scf, self.mol, dm)
-        return self.mat_ao2impbas(vhf_ao)
+        if self._eri is None:
+            self._eri = self.eri_on_impbas(mol)
+        vj, vk = _vhf.vhf_jk_incore_o2(self._eri, dm)
+        vhf = vj - vk * .5
+        return vhf
+
+#    def get_eff_potential(self, mol, dm, dm_last=0, vhf_last=0):
+#        dm = reduce(numpy.dot, (self.impbas_coeff, dm, \
+#                                self.impbas_coeff.T))
+#        vhf_ao = scf.hf.RHF.get_eff_potential(self.entire_scf, self.mol, dm)
+#        return self.mat_ao2impbas(vhf_ao)
 
     def frag_non_symm_projector(self, s1e):
         '''project operator of fragment. Its definition is not unique

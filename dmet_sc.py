@@ -172,7 +172,7 @@ class EmbSys(object):
             emb.bas_on_frag = bas_idx
             emb.pre_orth_ao = self.pre_orth_ao
             emb.orth_ao_method = self.orth_ao_method
-            emb.verbose = 4#self.emb_verbose
+            emb.verbose = self.emb_verbose
             embs.append(emb)
 
         if self.orth_coeff is None:
@@ -192,13 +192,13 @@ class EmbSys(object):
     # update the embs in terms of the given entire_scf
     def update_embs(self, mol, embs, eff_scf, orth_coeff=None):
 
-# local SCF in case entire_scf does not converge?
-        for emb in embs:
-            emb.imp_scf()
-        hcore = self.entire_scf.get_hcore(mol)
-        for emb in embs:
-            emb._pure_hcore = emb.mat_ao2impbas(hcore)
-        return embs
+# local SCF will be carried out in self.update_embs_vfit_ci
+#ABORT        for emb in embs:
+#ABORT            emb.imp_scf()
+#ABORT        hcore = self.entire_scf.get_hcore(mol)
+#ABORT        for emb in embs:
+#ABORT            emb._pure_hcore = emb.mat_ao2impbas(hcore)
+#ABORT        return embs
 
 # * If entire_scf is converged, the embedding HF results can be projected from
 # entire_scf as follows.
@@ -207,10 +207,11 @@ class EmbSys(object):
         if orth_coeff is None:
             orth_coeff = self.orth_coeff
         t0 = time.clock()
-        sc = numpy.dot(eff_scf.get_ovlp(mol),eff_scf.mo_coeff)
+        sc = numpy.dot(eff_scf.get_ovlp(mol), eff_scf.mo_coeff)
         c_inv = numpy.dot(eff_scf.get_ovlp(mol), orth_coeff).T
         fock0 = numpy.dot(sc*eff_scf.mo_energy, sc.T.conj())
         hcore = eff_scf.get_hcore(mol)
+        nocc = int(eff_scf.mo_occ.sum()) / 2
         for ifrag, emb in enumerate(embs):
             mo_orth = numpy.dot(c_inv, eff_scf.mo_coeff[:,eff_scf.mo_occ>1e-15])
             emb.imp_site, emb.bath_orb, emb.env_orb = \
@@ -223,13 +224,23 @@ class EmbSys(object):
             emb._vhf_env = emb.init_vhf_env(mol, emb.env_orb)
 
 # project entire-sys SCF results to embedding-sys SCF results
-            f = emb.mat_ao2impbas(fock0)
-            emb.mo_energy, emb.mo_coeff_on_imp = numpy.linalg.eigh(f)
+# This is the results of embedded-HF which are projected from entire HF.
+# Generally, the local fitting potential is not consistent to the global
+# potential (which is not linearly transformed from the global potential), the
+# embedded-HF results can be different from the projected HF results.  So the
+# local impurity solver CANNOT directly use the projected HF orbitals and
+# energies, local-SCF is obligatory.
+# * the relevant embedding-SCF lies in self.update_embs_vfit_ci
+            emb._project_fock = emb.mat_ao2impbas(fock0)
+            emb.mo_energy, emb.mo_coeff_on_imp = numpy.linalg.eigh(emb._project_fock)
             emb.mo_coeff = numpy.dot(emb.impbas_coeff, emb.mo_coeff_on_imp)
             emb.mo_occ = numpy.zeros_like(emb.mo_energy)
             emb.mo_occ[:emb.nelectron/2] = 2
             emb.hf_energy = 0
             emb._pure_hcore = emb.mat_ao2impbas(hcore)
+            nimp = emb.imp_site.shape[1]
+            cimp = numpy.dot(emb.impbas_coeff[:,:nimp].T, sc[:,:nocc])
+            emb._project_nelec_frag = numpy.linalg.norm(cimp)**2*2
 
         if eff_scf._eri is not None:
             t1 = time.clock()
@@ -252,8 +263,22 @@ class EmbSys(object):
                     emb.vfit_ci[:nd,:nd] = v_ci_group[m]
                 else:
                     emb.vfit_ci = v_ci_group[m]
+
+# Do embedding SCF for impurity solver since the embedded HF with vfit_ci
+# cannot be directly projected from the entire SCF results.
+# emb.mo_coeff_on_imp will be used in frag_fci_solver
+                emb.get_hcore = lambda mol: emb._pure_hcore + emb._vhf_env \
+                        + emb.vfit_ci
+                emb.get_ovlp = lambda mol: numpy.eye(emb._vhf_env.shape[0])
+                emb.scf_conv, emb.hf_energy, emb.mo_energy, emb.mo_occ, \
+                        emb.mo_coeff_on_imp \
+                        = emb.scf_cycle(emb.mol, emb.scf_threshold, dump_chk=False)
+                #ABORTemb.mo_coeff = numpy.dot(emb.impbas_coeff, emb.mo_coeff_on_imp)
+                del(emb.get_hcore)
+                del(emb.get_ovlp)
         return embs
 
+    # NOTE embedded-HF is not SCF against vfit_mf
     def update_embs_vfit_mf(self, mol, embs, v_mf_group):
         for m, emb in enumerate(embs):
             if v_mf_group[m] is not 0:
@@ -528,7 +553,7 @@ class EmbSys(object):
             with open(sav_v, 'w') as f:
                 pickle.dump((v_add,v_add_ao), f)
         return e_tot
-#?
+
 #?# update the fragment corresponding to frag_id in self-consistency
 #?    def one_shot(self, mol, frag_id=0, sav_v=None):
 #?        self.vfit_method = lambda mol, embsys: \
@@ -565,8 +590,7 @@ def fit_without_local_scf(mol, emb, embsys):
     log.debug(embsys, 'dm_ref = %s', dm_ref)
     nimp = emb.dim_of_impurity()
     # this fock matrix includes the previous fitting potential
-    fock0 = numpy.dot(emb.mo_coeff_on_imp*emb.mo_energy, \
-                      emb.mo_coeff_on_imp.T)
+    fock0 = emb._project_fock
     nocc = emb.nelectron/2
 
     # The damped potential does not minimize |dm_ref - dm(fock0+v)|^2,
@@ -612,17 +636,14 @@ def fit_fixed_mf_dm(mol, embsys):
 def fit_chemical_potential(mol, emb, embsys):
     import scipy
     nimp = emb.dim_of_impurity()
-    # this fock matrix includes the pseudo potential of present fragment
-    mo = emb.mo_coeff_on_imp
-    nocc = emb.nelectron/2
-    nelec_frag = numpy.linalg.norm(mo[:nimp,:nocc])**2 * 2
+    nelec_frag = emb._project_nelec_frag
 
 # change chemical potential to get correct number of electrons
     def nelec_diff(v):
         vmat = numpy.eye(nimp) * v
         cires = embsys.frag_fci_solver(mol, emb, vmat)
         dm = cires['rdm1']
-        #print 'ddm ',nelec_frag - dm[:nimp].trace()
+        #print 'ddm ',nelec_frag,dm[:nimp].trace(), nelec_frag - dm[:nimp].trace()
         return nelec_frag - dm[:nimp].trace()
     chem_pot0 = emb.vfit_ci[0,0]
 #OPTIMIZE ME, approximate chemical potential
@@ -668,28 +689,36 @@ def dmet_sc_cycle(mol, embsys):
     #_diis = scf.diis.DIIS(mol)
     #_diis.diis_space = 6
 
-    v_group = embsys.init_embsys(mol)
-    e_tot = 0
-    icyc = 0
+    v_mf_group,_ = embsys.init_embsys(mol)
+    v_ci_group = embsys.vfit_ci_method(mol, embsys)
+    embsys.update_embs_vfit_ci(mol, embsys.embs, v_ci_group)
+    # to guarantee correct number of electrons, calculate embedded energy
+    # before calling update_embsys
+    e_tot, nelec = embsys.assemble_frag_fci_energy(mol)
+    v_group = (v_mf_group, v_ci_group)
+    log.info(embsys, 'macro iter = 0, e_tot = %.12g, nelec = %g', \
+             e_tot, nelec)
 
+    embsys.max_iter = 2
     for icyc in range(embsys.max_iter):
         v_group_old = v_group
         e_tot_old = e_tot
+
+        #log.debug(embsys, '  HF energy = %.12g', embsys.entire_scf.hf_energy)
+        v_mf_group = embsys.vfit_mf_method(mol, embsys)
+        embsys.update_embsys(mol, v_mf_group)
+
         v_ci_group = embsys.vfit_ci_method(mol, embsys)
         embsys.update_embs_vfit_ci(mol, embsys.embs, v_ci_group)
 
         # to guarantee correct number of electrons, calculate embedded energy
         # before calling update_embsys
         e_tot, nelec = embsys.assemble_frag_fci_energy(mol)
-
-        #log.debug(embsys, '  HF energy = %.12g', embsys.entire_scf.hf_energy)
-        v_mf_group = embsys.vfit_mf_method(mol, embsys)
-
         v_group = (v_mf_group, v_ci_group)
 
         dv = embsys.diff_vfit(v_group, v_group_old)
         log.info(embsys, 'macro iter = %d, e_tot = %.12g, nelec = %g, dv = %g', \
-                 icyc, e_tot, nelec, dv)
+                 icyc+1, e_tot, nelec, dv)
         de = abs(1-e_tot_old/e_tot)
         log.info(embsys, '                 delta_e = %g, (~ %g%%)', \
                  e_tot-e_tot_old, de * 100)
@@ -702,7 +731,6 @@ def dmet_sc_cycle(mol, embsys):
         #if icyc > 1: sys.exit()
 
         #v_group = _diis.update(v_group)
-        embsys.update_embsys(mol, v_mf_group)
 
     return e_tot, v_mf_group, v_ci_group
 
@@ -860,6 +888,7 @@ if __name__ == '__main__':
     embsys = EmbSys(mol, rhf, frag_group)
     embsys.max_iter = 10
     print embsys.scdmet(mol)
+    assert(0)
 
     b1 = 1.0
     nat = 10
