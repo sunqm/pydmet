@@ -28,19 +28,19 @@ embsys = dmet_sc.EmbSys(mol, mf)
 embsys.OneImp = vaspimp.OneImp
 embsys.frag_group = [[[0,1],[2,3],[4,5],[6,7],[8,9]], ]
 embsys.max_iter = 10
-print embsys.scdmet(mol)
+print embsys.scdmet()
 
 embsys = dmet_sc.EmbSys(mol, mf)
 embsys.OneImp = vaspimp.OneImpNaiveNI
 embsys.frag_group = [[[0,1],[2,3],[4,5],[6,7],[8,9]], ]
 embsys.max_iter = 10
-print embsys.scdmet(mol)
+print embsys.scdmet()
 
 embsys = dmet_sc.EmbSys(mol, mf)
 embsys.OneImp = vaspimp.OneImpNI
 embsys.frag_group = [[[0,1],[2,3],[4,5],[6,7],[8,9]], ]
 embsys.max_iter = 10
-print embsys.scdmet(mol)
+print embsys.scdmet()
 
 class OneImpFractionNI(vaspimp.OneImpNI):
     def get_hcore(self, mol=None):
@@ -58,5 +58,5 @@ embsys = dmet_sc.EmbSys(mol, mf)
 embsys.OneImp = OneImpFractionNI
 embsys.frag_group = [[[0,1],[2,3],[4,5],[6,7],[8,9]], ]
 embsys.max_iter = 10
-print embsys.scdmet(mol)
+print embsys.scdmet()
 

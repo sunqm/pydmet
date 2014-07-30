@@ -30,4 +30,4 @@ import dmet_nonsc
 for size in (1,2,3,5,6):
     embsys = dmet_nonsc.EmbSys(mol, mf)
     embsys.frag_group = [partition(nat, size) ]
-    print embsys.fullsys(mol)
+    print embsys.fullsys()

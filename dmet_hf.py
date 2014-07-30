@@ -239,15 +239,6 @@ def decompose_orbital(emb, mo_orth, bas_on_frag, num_bath=-1):
         #scf.hf.dump_orbital_coeff(emb.mol, env_orb)
 
     if mo_bath.shape[1] > 0:
-#ABORT        u, s, vh = numpy.linalg.svd(mo_bath[bas_on_frag,:])
-#ABORT        log.debug(emb, 'number of frag sites = %d', \
-#ABORT                  bas_on_frag.__len__())
-#ABORT        log.debug(emb, 'lowdin orthogonalized fragment sites:')
-#ABORT        for i, si in enumerate(s):
-#ABORT            if si > emb.lindep_cutoff:
-#ABORT                log.debug(emb, '%d th sqrt(eigen_value) = %12.9f  => frag', i, si)
-#ABORT            else:
-#ABORT                log.debug(emb, '%d th sqrt(eigen_value) = %12.9f', i, si)
         mo_bath[bas_on_frag] = 0
         norm = 1/numpy.sqrt(1-w[idx]**2)
         bath_orb = mo_bath * norm
@@ -272,7 +263,6 @@ class RHF(scf.hf.RHF):
         self.verbose = entire_scf.verbose
         self.fout = entire_scf.fout
 
-        self.lindep_cutoff = 1e-12
 # * non-zero occ_env_cutoff can remove core electrons from bath but will
 #   introduce non-integer total electrons.  In such case, the sum of the
 #   fragment electron density/energy does not reproduce the density/energy of
@@ -295,7 +285,7 @@ class RHF(scf.hf.RHF):
 #   contribution of env_orb.  This causes extra SCF in impurity and a slight
 #   difference between the converged imp_scf solution and the original SCF
 #   result.
-        self.occ_env_cutoff = 1e-3 # an MO is considered as env_orb when imp_occ < 1e-3
+        self.occ_env_cutoff = 1e-8 # an MO is considered as env_orb when imp_occ < 1e-8
         self.num_bath = -1
         self.chkfile = entire_scf.chkfile
 
@@ -348,7 +338,6 @@ class RHF(scf.hf.RHF):
         log.info(self, '\n')
         log.info(self, '******** DMET options *************')
         log.info(self, 'method = %s', self.__doc__)
-        log.info(self, 'linear dependent cutoff = %g', self.lindep_cutoff)
         log.info(self, 'bath/env cutoff = %g', self.occ_env_cutoff)
         log.info(self, 'num_bath = %g\n', self.num_bath)
 
@@ -356,39 +345,6 @@ class RHF(scf.hf.RHF):
         return decompose_den_mat(self, dm_orth*.5, self.bas_on_frag, self.num_bath)
     def decompose_orbital(self, mo_orth):
         return decompose_orbital(self, mo_orth, self.bas_on_frag, self.num_bath)
-
-# use set_bath_orth_by_svd by default, see decompose_orbital, decompose_den_mat
-#ABORT    def set_bath_orth_by_svd(self):
-#ABORT        def bath_orth(mo_bath):
-#ABORT            log.debug(self, 'lowdin orthogonalized bath orbitals:')
-#ABORT            u, s, vh = numpy.linalg.svd(mo_bath)
-#ABORT            n_bath = (s>self.lindep_cutoff).sum()
-#ABORT            log.info(self, 'number of bath orbitals = %d', n_bath)
-#ABORT            for i, si in enumerate(s):
-#ABORT                if si > self.lindep_cutoff:
-#ABORT                    log.debug(self, '%d th sqrt(eigen_value) = %12.9f  => bath', i, si)
-#ABORT                else:
-#ABORT                    log.debug(self, '%d th sqrt(eigen_value) = %12.9f', i, si)
-#ABORT            bath = numpy.dot(mo_bath, vh[s>self.lindep_cutoff,:].T.conj()) \
-#ABORT                    / s[s>self.lindep_cutoff]
-#ABORT            return bath
-#ABORT        self.orthogonalize_bath = bath_orth
-#ABORT
-#ABORT    def set_bath_orth_by_qr(self):
-#ABORT        def bath_orth(mo_bath):
-#ABORT            log.debug(self, 'Schmidt orthogonalized bath orbitals:')
-#ABORT            v, r = numpy.linalg.qr(mo_bath[:,::-1])
-#ABORT            s = r.diagonal()
-#ABORT            n_bath = (s>self.lindep_cutoff).sum()
-#ABORT            log.info(self, 'number of bath orbitals = %d', n_bath)
-#ABORT            for i, si in enumerate(s):
-#ABORT                if si > self.lindep_cutoff:
-#ABORT                    log.debug(self, '%d th norm = %12.9f  => bath', i, si)
-#ABORT                else:
-#ABORT                    log.debug(self, '%d th norm = %12.9f', i, si)
-#ABORT            bath = v[:,s>self.lindep_cutoff]
-#ABORT            return bath
-#ABORT        self.orthogonalize_bath = bath_orth
 
 ##################################################
 # scf for impurity

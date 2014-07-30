@@ -70,19 +70,21 @@ def cc(mol, nelec, h1e, h2e, ptrace, mo):
     frag_rdm1 = numpy.dot(p, rdm1)
     e1_ptrace = lib.trace_ab(frag_rdm1.reshape(-1), h1e.reshape(-1))
 
-    eri_full = numpy.empty((nmo,nmo,nmo,nmo))
-    ij = 0
-    for i in range(nmo):
-        for j in range(i+1):
-            kl = 0
-            for k in range(nmo):
-                for l in range(k+1):
-                    eri_full[i,k,j,l] = \
-                    eri_full[j,k,i,l] = \
-                    eri_full[i,l,j,k] = \
-                    eri_full[j,l,i,k] = eri[ij,kl]
-                    kl += 1
-            ij += 1
+    import dmet_misc
+    eri_full = dmet_misc.restore_full_eri(eri, nmo)
+    #eri_full = numpy.empty((nmo,nmo,nmo,nmo))
+    #ij = 0
+    #for i in range(nmo):
+    #    for j in range(i+1):
+    #        kl = 0
+    #        for k in range(nmo):
+    #            for l in range(k+1):
+    #                eri_full[i,k,j,l] = \
+    #                eri_full[j,k,i,l] = \
+    #                eri_full[i,l,j,k] = \
+    #                eri_full[j,l,i,k] = eri[ij,kl]
+    #                kl += 1
+    #        ij += 1
     frag_rdm2 = numpy.dot(p, rdm2.reshape(nmo,-1))
     e2_ptrace = lib.trace_ab(frag_rdm2.reshape(-1), eri_full.reshape(-1))
     e_ptrace = e1_ptrace + e2_ptrace * .5

@@ -291,9 +291,9 @@ class EmbSys(object):
 #?        # should we add mean-field potentail on the impurity solver?
 #?        v_mf_group = [emb.vfit_mf for emb in embs]
 #?        if self.with_hopping:
-#?            vglobal = self.assemble_to_fullmat(mol, v_mf_group)
+#?            vglobal = self.assemble_to_fullmat(v_mf_group)
 #?        else:
-#?            vglobal = self.assemble_to_blockmat(mol, v_mf_group)
+#?            vglobal = self.assemble_to_blockmat(v_mf_group)
 #?
 #?        for m, emb in enumerate(embs):
 #?            if self.env_pot_for_fci == NO_ENV_POT:
@@ -366,9 +366,9 @@ class EmbSys(object):
 
     def update_embsys(self, mol, v_mf_group):
         if self.with_hopping:
-            v_add = self.assemble_to_fullmat(mol, v_mf_group)
+            v_add = self.assemble_to_fullmat(v_mf_group)
         else:
-            v_add = self.assemble_to_blockmat(mol, v_mf_group)
+            v_add = self.assemble_to_blockmat(v_mf_group)
         v_add_ao = self.mat_orthao2ao(v_add)
         eff_scf = run_hf_with_ext_pot(mol, self.entire_scf, v_add_ao, \
                                       self.hf_follow_state)
@@ -410,9 +410,9 @@ class EmbSys(object):
 
         v_group = [emb.vfit_mf for emb in self.embs]
         if self.with_hopping:
-            v_global = self.assemble_to_fullmat(mol, v_group)
+            v_global = self.assemble_to_fullmat(v_group)
         else:
-            v_global = self.assemble_to_blockmat(mol, v_group)
+            v_global = self.assemble_to_blockmat(v_group)
 
         h1e = reduce(numpy.dot, (self.orth_coeff.T, \
                                  self.entire_scf.get_hcore(mol), \
@@ -460,7 +460,7 @@ class EmbSys(object):
         return e_tot, nelec
 
 
-    def assemble_to_blockmat(self, mol, v_group):
+    def assemble_to_blockmat(self, v_group):
         '''assemble matrix on impuity sites to the diagonal block'''
         nao = self.orth_coeff.shape[1]
         v_add = numpy.zeros((nao,nao))
@@ -471,7 +471,7 @@ class EmbSys(object):
                 v_add[j,bas_idx] = vfrag[i,:]
         return v_add
 
-    def assemble_to_fullmat(self, mol, dm_group):
+    def assemble_to_fullmat(self, dm_group):
         '''assemble matrix of the embsys to the full matrix'''
         nao = self.orth_coeff.shape[1]
         dm_big = numpy.zeros((nao,nao))
@@ -503,9 +503,10 @@ class EmbSys(object):
         return numpy.linalg.norm(dv_mf_group+dv_ci_group)
 
 
-    def scdmet(self, mol, sav_v=None):
+    def scdmet(self, sav_v=None):
         log.info(self, '==== start DMET self-consistency ====')
         self.dump_options()
+        mol = self.mol
 
         #if self.verbose >= param.VERBOSE_DEBUG:
         #    log.debug(self, '** DM of MF sys (on orthogonal AO) **')
@@ -526,9 +527,9 @@ class EmbSys(object):
                 log.debug(self, 'vfit_ci of frag %d = %s', m, v_ci_group[m])
 
             if self.with_hopping:
-                v_add = self.assemble_to_fullmat(mol, v_mf_group)
+                v_add = self.assemble_to_fullmat(v_mf_group)
             else:
-                v_add = self.assemble_to_blockmat(mol, v_mf_group)
+                v_add = self.assemble_to_blockmat(v_mf_group)
             log.debug(self, 'mean-field V_fitting in orth AO representation')
             fmt = '    %10.5f' * v_add.shape[1] + '\n'
             for c in numpy.array(v_add):
@@ -546,9 +547,9 @@ class EmbSys(object):
                 e_tot, e_tot+mol.nuclear_repulsion(), nelec)
         if isinstance(sav_v, str):
             if self.with_hopping:
-                v_add = self.assemble_to_fullmat(mol, v_mf_group)
+                v_add = self.assemble_to_fullmat(v_mf_group)
             else:
-                v_add = self.assemble_to_blockmat(mol, v_mf_group)
+                v_add = self.assemble_to_blockmat(v_mf_group)
             v_add_ao = self.mat_orthao2ao(v_add)
             with open(sav_v, 'w') as f:
                 pickle.dump((v_add,v_add_ao), f)
@@ -558,25 +559,25 @@ class EmbSys(object):
 #?    def one_shot(self, mol, frag_id=0, sav_v=None):
 #?        self.vfit_method = lambda mol, embsys: \
 #?                fit_pot_1shot(mol, embsys, frag_id)
-#?        e_tot = self.scdmet(mol, sav_v)
+#?        e_tot = self.scdmet(sav_v)
 #?        return e_tot
 
     # fitting potential includes both impurity block and imp-bath block
-    def scdmet_hopping(mol, sav_v=None):
+    def scdmet_hopping(sav_v=None):
         dm_fit_domain_bak = self.dm_fit_domain
         self.dm_fit_domain = NO_BATH_BLK
         with_hopping_bak = self.with_hopping
         self.with_hopping = True
-        e_tot = scdmet(mol, self, sav_v)
+        e_tot = scdmet(self, sav_v)
         self.dm_fit_domain = dm_fit_domain_bak
         self.with_hopping = with_hopping_bak
         return e_tot
 
 
     # backwards fitting: MF DM fixed, add vfit on FCI to match MF DM
-    def scdmet_bakwards(mol, sav_v=None):
+    def scdmet_bakwards(sav_v=None):
         self.vfit_method = fit_vfci_fixed_mf_dm
-        e_tot = scdmet(mol, self, sav_v)
+        e_tot = scdmet(self, sav_v)
         return e_tot
 
 
@@ -634,7 +635,7 @@ def fit_fixed_mf_dm(mol, embsys):
 
 
 def fit_chemical_potential(mol, emb, embsys):
-    import scipy
+    import scipy.optimize
     nimp = emb.dim_of_impurity()
     nelec_frag = emb._project_nelec_frag
 
@@ -653,7 +654,8 @@ def fit_chemical_potential(mol, emb, embsys):
     vmat = numpy.zeros((nemb,nemb))
     for i in range(nimp):
         vmat[i,i] = sol.x
-    log.debug(embsys, 'fit chem potential = %.11g, nelec error = %.11g', \
+    log.debug(embsys, 'scipy.optimize summary %s', sol)
+    log.debug(embsys, 'chem potential = %.11g, nelec error = %.11g', \
               sol.x, sol.fun)
     log.debug(embsys, '        ncall = %d, scipy.optimize success: %s', \
               sol.nfev, sol.success)
@@ -881,13 +883,9 @@ if __name__ == '__main__':
     #frag_group = [(0,1,), (2,3,4,)]
     #frag_group = [(0,1,2,), (3,4,)]
     #frag_group = [(0,1,2,3,), (4,)]
-    #print scdmet(mol, rhf, frag_group) #-52.2588738758
-    #print dmet_1shot(mol, rhf, frag_group) #-52.2674000845
-    #print scdmet_1shot(mol, rhf, frag_group)
-    #print scdmet_fci_pot(mol, rhf, frag_group)
     embsys = EmbSys(mol, rhf, frag_group)
     embsys.max_iter = 10
-    print embsys.scdmet(mol)
+    print embsys.scdmet()
     assert(0)
 
     b1 = 1.0
@@ -908,4 +906,4 @@ if __name__ == '__main__':
     embsys = EmbSys(mol, mf)
     embsys.frag_group = [[[0,1],[2,3],[4,5],[6,7],[8,9]], ]
     embsys.max_iter = 10
-    print embsys.scdmet(mol)
+    print embsys.scdmet()

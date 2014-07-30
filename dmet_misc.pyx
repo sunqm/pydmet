@@ -91,30 +91,51 @@ def u_embs_eri_ao2mo_o3(numpy.ndarray[double,ndim=1] eri_ao,
 
 ##############################
 
-cdef extern void mixvhf_vj(double *dm, double *vj, int nset, int nbas_e1,
-                           int *atm, int natm, int *bas, int nbas, double *env)
-cdef extern void mixvhf_vk(double *dm, double *vk, int nset, int nbas_e1,
-                           int *atm, int natm, int *bas, int nbas, double *env)
+#cdef extern void mixvhf_vj(double *dm, double *vj, int nset, int nbas_e1,
+#                           int *atm, int natm, int *bas, int nbas, double *env)
+#cdef extern void mixvhf_vk(double *dm, double *vk, int nset, int nbas_e1,
+#                           int *atm, int natm, int *bas, int nbas, double *env)
+#
+#def mix_vhf(numpy.ndarray dm, nbas_e1, atm, bas, env):
+#    '''vhf_e2 = g_{e1,e2} * dm_e1'''
+#    cdef numpy.ndarray[int,ndim=2] c_atm = numpy.array(atm, dtype=numpy.int32)
+#    cdef numpy.ndarray[int,ndim=2] c_bas = numpy.array(bas, dtype=numpy.int32)
+#    cdef numpy.ndarray[double] c_env = numpy.array(env)
+#    cdef int natm = c_atm.shape[0]
+#    cdef int nbas = c_bas.shape[0]
+#    if dm.ndim == 2:
+#        nset = 1
+#        dm_shape = (dm.shape[0], dm.shape[1])
+#    else:
+#        nset = dm.shape[0]
+#        dm_shape = (dm.shape[0], dm.shape[1], dm.shape[2])
+#
+#    cdef numpy.ndarray vj = numpy.empty(dm_shape)
+#    cdef numpy.ndarray vk = numpy.empty(dm_shape)
+#
+#    mixvhf_vj(<double *>dm.data, <double *>vj.data, nset, nbas_e1,
+#                     &c_atm[0,0], natm, &c_bas[0,0], nbas, &c_env[0])
+#    mixvhf_vk(<double *>dm.data, <double *>vk.data, nset, nbas_e1,
+#                     &c_atm[0,0], natm, &c_bas[0,0], nbas, &c_env[0])
+#    return vj, vk
 
-def mix_vhf(numpy.ndarray dm, nbas_e1, atm, bas, env):
-    '''vhf_e2 = g_{e1,e2} * dm_e1'''
-    cdef numpy.ndarray[int,ndim=2] c_atm = numpy.array(atm, dtype=numpy.int32)
-    cdef numpy.ndarray[int,ndim=2] c_bas = numpy.array(bas, dtype=numpy.int32)
-    cdef numpy.ndarray[double] c_env = numpy.array(env)
-    cdef int natm = c_atm.shape[0]
-    cdef int nbas = c_bas.shape[0]
-    if dm.ndim == 2:
-        nset = 1
-        dm_shape = (dm.shape[0], dm.shape[1])
-    else:
-        nset = dm.shape[0]
-        dm_shape = (dm.shape[0], dm.shape[1], dm.shape[2])
 
-    cdef numpy.ndarray vj = numpy.empty(dm_shape)
-    cdef numpy.ndarray vk = numpy.empty(dm_shape)
+##############################
 
-    mixvhf_vj(<double *>dm.data, <double *>vj.data, nset, nbas_e1,
-                     &c_atm[0,0], natm, &c_bas[0,0], nbas, &c_env[0])
-    mixvhf_vk(<double *>dm.data, <double *>vk.data, nset, nbas_e1,
-                     &c_atm[0,0], natm, &c_bas[0,0], nbas, &c_env[0])
-    return vj, vk
+
+def restore_full_eri(numpy.ndarray[double, ndim=2] eri_4fold, int n):
+    cdef numpy.ndarray[double, ndim=4] eri_full = numpy.empty((n,n,n,n))
+    cdef i, j, k, l, ij, kl
+    ij = 0
+    for i in range(n):
+        for j in range(i+1):
+            kl = 0
+            for k in range(n):
+                for l in range(k+1):
+                    eri_full[i,k,j,l] = \
+                    eri_full[j,k,i,l] = \
+                    eri_full[i,l,j,k] = \
+                    eri_full[j,l,i,k] = eri_4fold[ij,kl]
+                    kl += 1
+            ij += 1
+    return eri_full
