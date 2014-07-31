@@ -165,43 +165,47 @@ def read_clustdump(fcidump, jdump, kdump, fockdump):
         i, j = map(int, dat[2:4])
         val = map(float, dat[:2])
         if abs(val[1]) > 1e-12:
-            print i,j
-            assert(abs(val[1]) < 1e-12)
+            print i,j, val
+            assert(abs(val[1]) < 1e-9)
         vj[i-1,j-1] = val[0]
         dat = finp.readline().split()
     dic['J'] = vj
 
     finp = open(kdump, 'r')
-    while finp.readline():
+    dat = finp.readline()
+    while dat:
         if 'END' in dat:
             break
+        dat = finp.readline()
     vk = numpy.zeros((norb,norb))
     dat = finp.readline().split()
     while dat:
         i, j = map(int, dat[2:4])
         val = map(float, dat[:2])
-        if abs(val[1]) > 1e-12:
-            print i,j
-            assert(abs(val[1]) < 1e-12)
+        #if abs(val[1]) > 1e-12:
+        #    print i,j, val
+        #    assert(abs(val[1]) < 1e-5)
         vk[i-1,j-1] = val[0]
         dat = finp.readline().split()
     dic['K'] = vk
 
     finp = open(fockdump, 'r')
-    while finp.readline():
+    dat = finp.readline()
+    while dat:
         if 'END' in dat:
             break
+        dat = finp.readline()
     fock = numpy.zeros((norb,norb))
     mo_energy = numpy.zeros(norb)
     dat = finp.readline().split()
     while dat:
-        i, j, k = map(int, dat[2:5])
+        i, j = map(int, dat[2:4])
         val = map(float, dat[:2])
-        if abs(val[1]) > 1e-12:
-            print i,j
-            assert(abs(val[1]) < 1e-12)
-        if k == 0:
-            mo_energy[i] = val[0]
+        #if abs(val[1]) > 1e-12:
+        #    print i,j, val
+        #    assert(abs(val[1]) < 1e-5)
+        if j == 0:
+            mo_energy[i-1] = val[0]
         else:
             fock[i-1,j-1] = val[0]
         dat = finp.readline().split()
