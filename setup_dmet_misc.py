@@ -15,7 +15,7 @@ codelib = os.environ['HOME']+'/code/lib'
 codeinc = os.environ['HOME']+'/code/include'
 extra_info = {
     'include_dirs': [mklroot+'/include', codeinc],
-    'libraries': ['cvhf', 'mkl_intel_lp64', 'mkl_core', 'mkl_sequential', 'mkl_avx', 'pthread'],
+    'libraries': ['mkl_intel_lp64', 'mkl_core', 'mkl_sequential', 'mkl_avx', 'pthread'],
     'library_dirs': [mklroot+'/lib/intel64', codelib],
     'extra_compile_args': ['-fopenmp','-ffast-math','-march=native'],
     'extra_link_args': ['-fopenmp'],
