@@ -8,7 +8,7 @@ typedef long FINT;
 typedef int FINT;
 #endif
 
-#include "fblas.h"
+//#include "fblas.h"
 
 static void ao2mo_unpack(int n, double *vec, double *mat)
 {

@@ -26,7 +26,7 @@ extra_info['include_dirs'].append(numpy.get_include())
 ext_modules = [Extension('dmet_misc',
                          ['dmet_misc_helper.c', \
                           'ao2mo_helper.c', \
-                          'mix_vhf_env.c', \
+                          #'mix_vhf_env.c',
                           'dmet_misc.pyx', ],
                          **extra_info
                         )]
