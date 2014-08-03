@@ -20,6 +20,7 @@ class EmbSys(dmet_sc.EmbSys):
         dmet_sc.EmbSys.__init__(self, mol, entire_scf, frag_group, \
                                 init_v, orth_coeff)
         self.max_iter = 1
+        self.fitmethod_1shot = dmet_sc.fit_chemical_potential
 
     def scdmet(self, sav_v=None):
         log.warn(self, 'Self-consistency is not allowed in non-SC-DMET')
@@ -53,12 +54,16 @@ class EmbSys(dmet_sc.EmbSys):
         emb.verbose = self.verbose
         #emb.imp_scf()
 
-        vfit_ci = dmet_sc.fit_chemical_potential(mol, emb, self)
+        vfit_ci = self.fitmethod_1shot(mol, emb, self)
         #self.update_embs_vfit_ci(mol, [emb], [vfit_ci])
         cires = self.frag_fci_solver(mol, emb, vfit_ci)
         e_tot = cires['etot'] + emb.energy_by_env
-        e_frag = cires['e1frag'] + cires['e2frag']
         nimp = emb.dim_of_impurity()
+        e1_frag = numpy.dot(cires['rdm1'][:nimp].flatten(), \
+                            emb._pure_hcore[:nimp].flatten())
+        envhf_frag = numpy.dot(cires['rdm1'][:nimp].flatten(), \
+                               emb._vhf_env[:nimp].flatten())
+        e_frag = e1_frag + envhf_frag * .5 + cires['e2frag']
         n_frag = cires['rdm1'][:nimp].trace()
         #print etot, emb.hf_energy
 
@@ -99,6 +104,7 @@ class EmbSysPeriod(EmbSys):
         emb._project_fock = emb.mat_ao2impbas(self._vasphf['FOCK'])
         mo = self._vasphf['MO_COEFF']
         nimp = self._vasphf['NIMP']
+        emb._pure_hcore = emb.get_hcore(mol)
         cimp = numpy.dot(emb.impbas_coeff[:,:nimp].T,
                          mo[:,:self._vasphf['NELEC']/2])
         emb._project_nelec_frag = numpy.linalg.norm(cimp)**2*2
@@ -131,10 +137,15 @@ class EmbSysPeriod(EmbSys):
             vfit_ci = fit_bath_float_nelec(mol, emb, self)
         else:
             vfit_ci = fit_mix_float_nelec(mol, emb, self)
+
         cires = self.frag_fci_solver(mol, emb, vfit_ci)
         e_tot = cires['etot'] + emb.energy_by_env
-        e_frag = cires['e1frag'] + cires['e2frag']
         nimp = emb.dim_of_impurity()
+        e1_frag = numpy.dot(cires['rdm1'][:nimp].flatten(), \
+                            emb._pure_hcore[:nimp].flatten())
+        envhf_frag = numpy.dot(cires['rdm1'][:nimp].flatten(), \
+                               emb._vhf_env[:nimp].flatten())
+        e_frag = e1_frag + envhf_frag * .5 + cires['e2frag']
         n_frag = cires['rdm1'][:nimp].trace()
 
         log.info(self, '====================')

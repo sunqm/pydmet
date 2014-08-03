@@ -557,28 +557,28 @@ class EmbSys(object):
 
 #?# update the fragment corresponding to frag_id in self-consistency
 #?    def one_shot(self, mol, frag_id=0, sav_v=None):
-#?        self.vfit_method = lambda mol, embsys: \
+#?        self.vfit_mf_method = lambda mol, embsys: \
 #?                fit_pot_1shot(mol, embsys, frag_id)
 #?        e_tot = self.scdmet(sav_v)
 #?        return e_tot
-
-    # fitting potential includes both impurity block and imp-bath block
-    def scdmet_hopping(sav_v=None):
-        dm_fit_domain_bak = self.dm_fit_domain
-        self.dm_fit_domain = NO_BATH_BLK
-        with_hopping_bak = self.with_hopping
-        self.with_hopping = True
-        e_tot = scdmet(self, sav_v)
-        self.dm_fit_domain = dm_fit_domain_bak
-        self.with_hopping = with_hopping_bak
-        return e_tot
-
-
-    # backwards fitting: MF DM fixed, add vfit on FCI to match MF DM
-    def scdmet_bakwards(sav_v=None):
-        self.vfit_method = fit_vfci_fixed_mf_dm
-        e_tot = scdmet(self, sav_v)
-        return e_tot
+#?
+#?    # fitting potential includes both impurity block and imp-bath block
+#?    def scdmet_hopping(sav_v=None):
+#?        dm_fit_domain_bak = self.dm_fit_domain
+#?        self.dm_fit_domain = NO_BATH_BLK
+#?        with_hopping_bak = self.with_hopping
+#?        self.with_hopping = True
+#?        e_tot = scdmet(self, sav_v)
+#?        self.dm_fit_domain = dm_fit_domain_bak
+#?        self.with_hopping = with_hopping_bak
+#?        return e_tot
+#?
+#?
+#?    # backwards fitting: MF DM fixed, add vfit on FCI to match MF DM
+#?    def scdmet_bakwards(sav_v=None):
+#?        self.vfit_ci_method = fit_vfci_fixed_mf_dm
+#?        e_tot = scdmet(self, sav_v)
+#?        return e_tot
 
 
 ###########################################################

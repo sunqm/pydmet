@@ -38,7 +38,7 @@ def _scf_energy(h1e, h2e, mo, nocc):
             = mf.scf_cycle(mol, 1e-9)
     return hf_energy, mo_energy, mo_occ, mo_coeff
 
-def cc(mol, nelec, h1e, h2e, ptrace, mo):
+def cc(mol, nelec, h1e, h2e, ptrace, mo, ccname='CCSD'):
     hf_energy, mo_energy, mo_occ, mo = \
             _scf_energy(h1e, h2e, mo, nelec/2)
     h1e = reduce(numpy.dot, (mo.T, h1e, mo))
@@ -54,7 +54,7 @@ def cc(mol, nelec, h1e, h2e, ptrace, mo):
     with psi4.capture_stdout():
         nmo = h1e.shape[0]
         ps.prepare('RHF', numpy.eye(nmo), h1e, eri, nelec)
-        ecc = ps.energy('CCSD')
+        ecc = ps.energy(ccname)
         rdm1, rdm2 = ps.density()
         rdm1 *= 2 # Psi4 gives rdm1 of alpha spin
 
@@ -97,6 +97,12 @@ def cc(mol, nelec, h1e, h2e, ptrace, mo):
            'e2frag': e2_ptrace*.5}
 
     return res
+
+def ccsd(mol, nelec, h1e, h2e, ptrace, mo):
+    return cc(mol, nelec, h1e, h2e, ptrace, mo, 'CCSD')
+
+def ccsd_t(mol, nelec, h1e, h2e, ptrace, mo):
+    return cc(mol, nelec, h1e, h2e, ptrace, mo, 'CCSD(T)')
 
 def _fcidump(fout, nelec, hcore, eri):
     nmo = hcore.shape[0]
