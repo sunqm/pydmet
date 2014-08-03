@@ -1,40 +1,23 @@
 import numpy
 from pyscf import gto
-import hf
-import dmet_nonsc
+from pyscf import scf
 
-'''test HF-in-HF embedding'''
+from pydmet import vaspimp
+from pydmet import dmet_nonsc
 
-mol = gto.Mole()
-mol.verbose = 5
-mol.output = 'out_test_hfhf'
-mol.build()
+vasphf = vaspimp.read_clustdump('FCIDUMP.CLUST.GTO', 'JDUMP', 'KDUMP',
+                                 'FOCKDUMP')
+fake_hf = vaspimp.fake_entire_scf(vasphf)
+emb = vaspimp.OneImpOnCLUSTDUMP(fake_hf, vasphf)
+emb.occ_env_cutoff = 1e-14
+emb.orth_coeff = numpy.eye(vasphf['NORB'])
+emb.verbose = 5
+emb.imp_scf()
 
-mf = hf.RHF(mol, 'C_solid_2x2x2/test2/FCIDUMP.CLUST.GTO',
-            'C_solid_2x2x2/test2/JKDUMP')
-escf0 = mf.scf()
-#emb = OneImp(mol, mf, [0,1,2,3])
-#print dmet_1shot(mol, emb)
+mo = vasphf['MO_COEFF']
+nimp = vasphf['NIMP']
+cimp = numpy.dot(emb.impbas_coeff[:,:nimp].T, mo[:,:vasphf['NELEC']/2])
+print 'NELEC from Lattice HF', numpy.linalg.norm(cimp)**2*2
+cimp = emb.mo_coeff_on_imp[:nimp,:emb.nelectron/2]
+print 'NELEC from embedding-HF', numpy.linalg.norm(cimp)**2*2
 
-mf = hf.RHF(mol, 'C_solid_2x2x2/test2/FCIDUMP.CLUST.GTO',
-            'C_solid_2x2x2/test2/JKDUMP')
-mf.mo_coeff = mf._fcidump['MO_COEFF']
-mf.mo_energy = mf._fcidump['MO_ENERGY']
-mf.mo_occ = numpy.zeros_like(mf.mo_energy)
-nocc = mf._fcidump['NELEC']/2
-mf.mo_occ[:nocc] = 2
-vhf = mf._fcidump['J'] - mf._fcidump['K']
-dm = numpy.dot(mf.mo_coeff, mf.mo_coeff.T) * 2
-mf.hf_energy = mf.mo_energy[:nocc].sum() * 2 - vhf[:nocc].trace()
-
-print escf0, mf.hf_energy
-print mf.hf_energy - escf0
-
-#emb = OneImp(mol, mf, [0,1,2,3])
-#print dmet_1shot(mol, emb)
-#
-##print energy
-##print mf.mo_energy
-##print mf._fcidump['MO_ENERGY']
-#        self.scf_conv, self.hf_energy, self.mo_energy, self.mo_occ, \
-#                self.mo_coeff_on_imp \

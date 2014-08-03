@@ -82,20 +82,72 @@ class OneImpNI(OneImpNaiveNI):
 
 
 ##########################################################################
+def decompose_orbital_with_impsite(emb, mo_orth, bas_on_frag, num_bath=-1):
+    log.debug(emb, 'occupied mo shape = %d, %d', *mo_orth.shape)
+    log.debug(emb, 'number of basis on fragment = %d', \
+              bas_on_frag.__len__())
+
+    log.debug(emb, '*** decompose orbitals to fragment sites, '\
+              'bath, env orbitals ***')
+
+    fmo = mo_orth[bas_on_frag]
+    pre_nao, w1, pre_env_h = numpy.linalg.svd(fmo)
+    mo1 = numpy.dot(mo_orth, pre_env_h.T.conj())
+    w = numpy.zeros(mo_orth.shape[1])
+    w[:w1.size] = w1   # when nimp < nmo, adding 0s by the end
+
+    idx, not_idx, rest_idx = dmet_hf._pick_bath_idx(w1**2, num_bath, emb.occ_env_cutoff)
+    env_idx = not_idx + range(w1.size, mo_orth.shape[1])
+    mo_bath = mo1[:,idx]
+    env_orb = mo1[:,env_idx]
+    log.info(emb, 'number of proto bath orbital = %d', mo_bath.shape[1])
+    log.info(emb, 'number of env orbitals = %d', env_orb.shape[1])
+    log.debug(emb, 'entanglement weight (= sqrt(occs)),  occ')
+    if emb.verbose >= param.VERBOSE_DEBUG:
+        for i in idx:
+            log.debug(emb, '%d th weight = %12.9f, %12.9f  => bath (%s)', \
+                      i, w[i], w[i]**2, \
+                      ('acceptor' if w[i]**2>0.5 else 'donor'))
+        for i in env_idx:
+            log.debug(emb, '%d th weight = %12.9f, %12.9f  => env', \
+                      i, w[i], w[i]**2)
+        for i in rest_idx:
+            log.debug(emb, '%d th weight = %12.9f, %12.9f => rest/imp', \
+                      i, w[i], w[i]**2)
+        log.debug(emb, 'potentially change in embsys charge = %12.9f', \
+                  sum(w[not_idx]**2)+sum(w[rest_idx]**2-1))
+        #log.debug(emb, ' ** env orbital coefficients (on orthogonal basis)**')
+        #scf.hf.dump_orbital_coeff(emb.mol, env_orb)
+
+    imp_site = mo_bath[bas_on_frag]/w[idx]
+    if mo_bath.shape[1] > 0:
+        mo_bath[bas_on_frag] = 0
+        norm = 1/numpy.sqrt(1-w[idx]**2)
+        bath_orb = mo_bath * norm
+    else:
+        bath_orb = mo_bath
+    #if emb.verbose >= param.VERBOSE_DEBUG:
+    #    log.debug(emb, ' ** bath orbital coefficients (on orthogonal basis) **')
+    #    scf.hf.dump_orbital_coeff(emb.mol, bath_orb)
+    return imp_site, bath_orb, env_orb
 
 class OneImpOnCLUSTDUMP(OneImp):
     def __init__(self, entire_scf, vasphf):
         self._vasphf = vasphf
         dmet_hf.RHF.__init__(self, entire_scf, numpy.eye(vasphf['NORB']))
-        self.bas_on_frag = range(self._vasphf['NIMP'])
+        self.bas_on_frag = self._vasphf['ORBIND']
         self._eri = vasphf['ERI']
 
     def init_dmet_scf(self, mol=None):
         effscf = self.entire_scf
         mo_orth = effscf.mo_coeff[:,effscf.mo_occ>1e-15]
+        #self.imp_site, self.bath_orb, self.env_orb = \
+        #        dmet_hf.decompose_orbital(self, mo_orth, self.bas_on_frag)
         self.imp_site, self.bath_orb, self.env_orb = \
-                dmet_hf.decompose_orbital(self, mo_orth, self.bas_on_frag)
+                decompose_orbital_with_impsite(self, mo_orth, self.bas_on_frag)
         self.impbas_coeff = self.cons_impurity_basis()
+        log.debug(self, 'diff of impbas_coeff to readin embasis %.8g',
+                  abs(abs(self.impbas_coeff) - abs(self._vasphf['EMBASIS'])).sum())
 
         self.nelectron = int(effscf.mo_occ.sum()) - self.env_orb.shape[1] * 2
         log.info(self, 'number of electrons for impurity  = %d', \
@@ -219,6 +271,9 @@ def read_clustdump(fcidump, jdump, kdump, fockdump):
             dic['NEMB'] = int(dat[1])
             dic['NIMP'] = int(dat[3])
             dic['NBATH'] = int(dat[5])
+        elif 'ORBIND' in dat[0].upper():
+            dat = re.split('[=,]', finp.readline())
+            dic['ORBIND'] = map(lambda x: int(x)-1, dat[:dic['NIMP']])
         elif 'END' in dat[0].upper():
             break
         dat = re.split('[=,]', finp.readline())
@@ -226,6 +281,7 @@ def read_clustdump(fcidump, jdump, kdump, fockdump):
     npair = nemb*(nemb+1)/2
     h1emb = numpy.zeros((nemb,nemb))
     mo_coeff = numpy.zeros((norb,norb))
+    embasis = numpy.zeros((norb,nemb))
     eri = numpy.zeros((npair,npair))
     dat = finp.readline().split()
     while dat:
@@ -241,6 +297,8 @@ def read_clustdump(fcidump, jdump, kdump, fockdump):
             h1emb[i-1,j-1] = h1emb[j-1,i-1] = val[0]
         elif l == -1:
             mo_coeff[i-1,j-1] = val[0]
+        elif l == -2:
+            embasis[i-1,j-1] = val[0]
         else:
             if i >= j:
                 ij = (i-1)*i/2 + j-1
@@ -253,6 +311,7 @@ def read_clustdump(fcidump, jdump, kdump, fockdump):
             eri[ij,kl] = eri[kl,ij] = val[0]
         dat = finp.readline().split()
     dic['MO_COEFF'] = mo_coeff
+    dic['EMBASIS'] = numpy.dot(mo_coeff,embasis)
     dic['H1EMB'] = h1emb
     dic['ERI'] = eri
     return dic

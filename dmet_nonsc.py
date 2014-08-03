@@ -96,6 +96,16 @@ class EmbSysPeriod(EmbSys):
         emb.verbose = self.emb_verbose
         emb.imp_scf()
         embs = [emb]
+        emb._project_fock = emb.mat_ao2impbas(self._vasphf['FOCK'])
+        mo = self._vasphf['MO_COEFF']
+        nimp = self._vasphf['NIMP']
+        cimp = numpy.dot(emb.impbas_coeff[:,:nimp].T,
+                         mo[:,:self._vasphf['NELEC']/2])
+        emb._project_nelec_frag = numpy.linalg.norm(cimp)**2*2
+        log.debug(emb, 'nelec of imp from lattice HF %.8g',
+                  emb._project_nelec_frag)
+        log.debug(emb, 'nelec of imp from embedding HF %.8g',
+                  numpy.linalg.norm(emb.mo_coeff_on_imp[:nimp,:emb.nelectron/2])**2*2)
         #embs = self.update_embs(mol, embs, self.entire_scf, self.orth_coeff)
         emb.vfit_mf = numpy.zeros_like(self._vasphf['H1EMB'])
         emb.vfit_ci = numpy.zeros_like(self._vasphf['H1EMB'])
@@ -199,6 +209,7 @@ def fit_bath_float_nelec(mol, emb, embsys):
         nelec_mf = numpy.sum(mo[:nimp,:nocc]**2)
         cires = embsys.frag_fci_solver(mol, emb, vmat)
         dm = cires['rdm1']
+        print 'ddm ',v,nelec_mf,dm[:nimp].trace(), nelec_mf - dm[:nimp].trace()
         return nelec_mf - dm[:nimp].trace()
     x = fit_chempot(mol, emb, embsys, diff_nelec)
     return vadd(emb, x)
