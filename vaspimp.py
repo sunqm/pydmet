@@ -157,19 +157,25 @@ class OneImpOnCLUSTDUMP(OneImp):
     def init_vhf_env(self, mol, env_orb):
         self.energy_by_env = 0
         nemb = self._vasphf['NEMB']
-        return numpy.zeros((nemb,nemb))
+        c = numpy.dot(self.impbas_coeff.T, self._vasphf['MO_COEFF'])
+        vhf = numpy.dot(c*self._vasphf['MO_ENERGY'], c.T) \
+                - self._vasphf['H1EMB'].copy()
+
+        mocc = c[:,:self._vasphf['NELEC']/2]
+        dmemb = numpy.dot(mocc, mocc.T)*2
+        vemb = self.get_eff_potential(mol, dmemb)
+        return vhf - vemb
 
     def init_guess_method(self, mol):
         log.debug(self, 'init guess based on entire MO coefficients')
         eff_scf = self.entire_scf
-        entire_scf_dm = eff_scf.calc_den_mat(eff_scf.mo_coeff, eff_scf.mo_occ)
-        c = self.impbas_coeff
-        dm = reduce(numpy.dot, (c.T, entire_scf_dm, c))
+        c = numpy.dot(self.impbas_coeff.T, eff_scf.mo_coeff)
+        dm = eff_scf.calc_den_mat(c, eff_scf.mo_occ)
         hf_energy = 0
         return hf_energy, dm
 
     def get_hcore(self, mol=None):
-        return self._vasphf['H1EMB'].copy()
+        return self._vasphf['H1EMB'].copy() + self._vhf_env
 
     def get_ovlp(self, mol=None):
         return numpy.eye(self._vasphf['NEMB'])
@@ -186,6 +192,18 @@ class OneImpOnCLUSTDUMP(OneImp):
                 = self.scf_cycle(self.mol, self.scf_threshold, \
                                  dump_chk=False)
         self.mo_coeff = numpy.dot(self.impbas_coeff, self.mo_coeff_on_imp)
+        if self.scf_conv:
+            log.log(self, 'converged impurity sys electronic energy = %.15g', \
+                    self.hf_energy)
+        else:
+            log.log(self, 'SCF not converge.')
+            log.log(self, 'electronic energy = %.15g after %d cycles.', \
+                    self.hf_energy, self.max_scf_cycle)
+
+        dm = self.calc_den_mat(self.mo_coeff_on_imp, self.mo_occ)
+        vhf = self.get_eff_potential(self.mol, dm)
+        self.e_frag, self.n_elec_frag = \
+                self.calc_frag_elec_energy(self.mol, vhf, dm)
         return self.hf_energy
 
     def get_eff_potential(self, mol, dm, dm_last=0, vhf_last=0):

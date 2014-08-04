@@ -104,7 +104,7 @@ class EmbSysPeriod(EmbSys):
         emb._project_fock = emb.mat_ao2impbas(self._vasphf['FOCK'])
         mo = self._vasphf['MO_COEFF']
         nimp = self._vasphf['NIMP']
-        emb._pure_hcore = emb.get_hcore(mol)
+        emb._pure_hcore = self._vasphf['H1EMB'].copy()
         cimp = numpy.dot(emb.impbas_coeff[:,:nimp].T,
                          mo[:,:self._vasphf['NELEC']/2])
         emb._project_nelec_frag = numpy.linalg.norm(cimp)**2*2
@@ -130,11 +130,11 @@ class EmbSysPeriod(EmbSys):
 
         log.info(self, '===== Fitting chemical potential =====')
         if self.pot_on.upper() == 'IMP':
-            #vfit_ci = fit_imp_fix_nelec(mol, emb, self)
-            vfit_ci = fit_imp_float_nelec(mol, emb, self)
+            vfit_ci = fit_imp_fix_nelec(mol, emb, self)
+            #vfit_ci = fit_imp_float_nelec(mol, emb, self)
         elif self.pot_on.upper() == 'BATH':
-            #vfit_ci = fit_bath_fix_nelec(mol, emb, self)
-            vfit_ci = fit_bath_float_nelec(mol, emb, self)
+            vfit_ci = fit_bath_fix_nelec(mol, emb, self)
+            #vfit_ci = fit_bath_float_nelec(mol, emb, self)
         else:
             vfit_ci = fit_mix_float_nelec(mol, emb, self)
 
