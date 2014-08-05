@@ -52,7 +52,7 @@ class EmbSys(dmet_sc.EmbSys):
         self.init_embsys(mol)
         emb = self.embs[0]
         emb.verbose = self.verbose
-        #emb.imp_scf()
+        emb.imp_scf()
 
         vfit_ci = self.fitmethod_1shot(mol, emb, self)
         #self.update_embs_vfit_ci(mol, [emb], [vfit_ci])
