@@ -62,7 +62,10 @@ class EmbSys(object):
     def __init__(self, mol, entire_scf, frag_group=[], init_v=None,
                  orth_coeff=None):
         self.verbose = mol.verbose
-        self.fout = mol.fout
+        try:
+            self.stdout = self.fout = mol.fout
+        except:
+            self.stdout = self.fout = mol.stdout
         self.mol = mol
         self.emb_verbose = param.VERBOSE_QUITE
         self.OneImp = dmet_hf.RHF
