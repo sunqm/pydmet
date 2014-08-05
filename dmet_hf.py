@@ -261,7 +261,10 @@ class RHF(scf.hf.RHF):
     '''Non-relativistic restricted Hartree-Fock DMET'''
     def __init__(self, entire_scf, orth_ao=None):
         self.verbose = entire_scf.verbose
-        self.fout = entire_scf.fout
+        try:
+            self.stdout = self.fout = entire_scf.fout
+        except:
+            self.stdout = self.fout = entire_scf.stdout
 
 # * non-zero occ_env_cutoff can remove core electrons from bath but will
 #   introduce non-integer total electrons.  In such case, the sum of the

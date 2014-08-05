@@ -20,8 +20,8 @@ static void dmet_misc_unpack(unsigned int n, double *vec, double *mat)
 }
 
 
-static void extract_row_from_tri_eri(double *row, unsigned int row_id,
-                                     double *eri, unsigned int npair)
+void extract_row_from_tri_eri(double *row, unsigned int row_id,
+                              double *eri, unsigned int npair)
 {
         unsigned long idx;
         unsigned int i;
