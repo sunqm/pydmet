@@ -261,8 +261,11 @@ def _chem_pot_on_bath(emb, v):
 
 def fit_chempot(mol, emb, embsys, diff_nelec):
     chem_pot0 = emb.vfit_ci[0,0]
-    sol = scipy.optimize.root(diff_nelec, chem_pot0, tol=1e-3, method='lm',
-                              options={'ftol':1e-3, 'maxiter':10})
+    try:
+        sol = scipy.optimize.root(diff_nelec, chem_pot0, tol=1e-3, method='lm',
+                                  options={'ftol':1e-3, 'maxiter':10})
+    except ImportError:
+        sol = scipy.optimize.leastsq(diff_nelec, chem_pot0, ftol=1e-3, xtol=1e-3)
     log.debug(embsys, 'scipy.optimize summary %s', sol)
     log.debug(embsys, 'chem potential = %.11g, nelec error = %.11g', \
               sol.x, sol.fun)
