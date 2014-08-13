@@ -6,7 +6,7 @@ import numpy
 import scipy.linalg.flapack as lapack
 import h5py
 
-import gto
+from pyscf import gto
 from pyscf import scf
 from pyscf.scf import atom_hf
 from pyscf import lib
@@ -306,7 +306,8 @@ class RHF(scf.hf.RHF):
             self.pre_orth_ao = lambda mol: numpy.eye(mol.num_NR_function()) # self.set_ao_with_input_basis()
             #self.set_ao_with_atm_scf()
             #self.set_ao_with_projected_ano()
-            self.orth_ao_method = 'meta_lowdin' #self.init_with_lowdin_ao()
+            #self.orth_ao_method = 'meta_lowdin' #self.init_with_lowdin_ao()
+            self.orth_ao_method = 'lowdin'
             #self.init_with_meta_lowdin_ao()
             self.orth_coeff = None
         else:
@@ -457,8 +458,7 @@ class RHF(scf.hf.RHF):
         if self.entire_scf._eri is not None:
             eri = ao2mo.incore.full(self.entire_scf._eri, self.impbas_coeff)
         else:
-            eri = ao2mo.direct.full_iofree(self.entire_scf._eri, \
-                                           self.impbas_coeff)
+            eri = ao2mo.direct.full_iofree(mol, self.impbas_coeff)
         return eri
 
     def release_eri(self):
@@ -1402,7 +1402,7 @@ class UHF(RHF, scf.hf.UHF):
 if __name__ == '__main__':
     from pyscf import scf
     mol = gto.Mole()
-    mol.verbose = 1
+    mol.verbose = 5
     mol.output = 'out_hf'
     mol.atom.extend([
         ['O' , (0. , 0.     , 0.)],
@@ -1421,6 +1421,7 @@ if __name__ == '__main__':
 
     emb = RHF(mf)
     emb.imp_basidx = [1,2,3,4]
+#    emb.imp_atoms = [1,2]
     emb.imp_scf()
 
 #    import ci

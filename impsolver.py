@@ -50,7 +50,7 @@ def cc(mol, nelec, h1e, h2e, ptrace, mo, ccname='CCSD'):
             ij += 1
     eri = ao2mo.incore.full(eri1, mo)
 
-    ps = psi4.Solver()
+    ps = psi4.Solver(max_memory=1<<34)
     with psi4.capture_stdout():
         nmo = h1e.shape[0]
         ps.prepare('RHF', numpy.eye(nmo), h1e, eri, nelec)
@@ -68,7 +68,7 @@ def cc(mol, nelec, h1e, h2e, ptrace, mo, ccname='CCSD'):
     nmo = mo.shape[1]
     p = numpy.dot(mo[:ptrace,:].T, mo[:ptrace,:])
     frag_rdm1 = numpy.dot(p, rdm1)
-    e1_ptrace = lib.trace_ab(frag_rdm1.reshape(-1), h1e.reshape(-1))
+    e1_ptrace = numpy.dot(frag_rdm1.reshape(-1), h1e.reshape(-1))
 
     import dmet_misc
     eri_full = dmet_misc.restore_full_eri(eri, nmo)
@@ -86,7 +86,7 @@ def cc(mol, nelec, h1e, h2e, ptrace, mo, ccname='CCSD'):
     #                kl += 1
     #        ij += 1
     frag_rdm2 = numpy.dot(p, rdm2.reshape(nmo,-1))
-    e2_ptrace = lib.trace_ab(frag_rdm2.reshape(-1), eri_full.reshape(-1))
+    e2_ptrace = numpy.dot(frag_rdm2.reshape(-1), eri_full.reshape(-1))
     e_ptrace = e1_ptrace + e2_ptrace * .5
 
     #print ecc, hf_energy

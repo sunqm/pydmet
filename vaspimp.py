@@ -71,10 +71,9 @@ class OneImpNI(OneImpNaiveNI):
     def get_hcore(self, mol=None):
         nimp = len(self.bas_on_frag)
         effscf = self.entire_scf
-        sc = reduce(numpy.dot, (self.impbas_coeff.T, \
-                                self.entire_scf.get_ovlp(), effscf.mo_coeff))
-        fock = numpy.dot(sc*effscf.mo_energy, sc.T)
-        dmimp = effscf.calc_den_mat(mo_coeff=sc)
+        cs = numpy.linalg.solve(effscf.mo_coeff, self.impbas_coeff)
+        fock = numpy.dot(cs.T*effscf.mo_energy, cs)
+        dmimp = effscf.calc_den_mat(mo_coeff=cs.T)
         dm = numpy.zeros_like(fock)
         dm[:nimp,:nimp] = dmimp[:nimp,:nimp]
         h1e = fock - self.get_eff_potential(mol, dm)
@@ -141,11 +140,12 @@ class OneImpOnCLUSTDUMP(OneImp):
     def init_dmet_scf(self, mol=None):
         effscf = self.entire_scf
         mo_orth = effscf.mo_coeff[:,effscf.mo_occ>1e-15]
-        #self.imp_site, self.bath_orb, self.env_orb = \
-        #        dmet_hf.decompose_orbital(self, mo_orth, self.bas_on_frag)
         self.imp_site, self.bath_orb, self.env_orb = \
-                decompose_orbital_with_impsite(self, mo_orth, self.bas_on_frag)
+                dmet_hf.decompose_orbital(self, mo_orth, self.bas_on_frag)
+#        self.imp_site, self.bath_orb, self.env_orb = \
+#                decompose_orbital_with_impsite(self, mo_orth, self.bas_on_frag)
         self.impbas_coeff = self.cons_impurity_basis()
+        #self.impbas_coeff = self._vasphf['EMBASIS']
         log.debug(self, 'diff of impbas_coeff to readin embasis %.8g',
                   abs(abs(self.impbas_coeff) - abs(self._vasphf['EMBASIS'])).sum())
 
