@@ -141,11 +141,20 @@ class EmbSysPeriod(EmbSys):
         cires = self.frag_fci_solver(mol, emb, vfit_ci)
         e_tot = cires['etot'] + emb.energy_by_env
         nimp = emb.dim_of_impurity()
-        e1_frag = numpy.dot(cires['rdm1'][:nimp].flatten(), \
-                            emb._pure_hcore[:nimp].flatten())
-        envhf_frag = numpy.dot(cires['rdm1'][:nimp].flatten(), \
-                               emb._vhf_env[:nimp].flatten())
-        e_frag = e1_frag + envhf_frag * .5 + cires['e2frag']
+#        e1_frag = numpy.dot(cires['rdm1'][:nimp].flatten(), \
+#                            emb._pure_hcore[:nimp].flatten())
+#        envhf_frag = numpy.dot(cires['rdm1'][:nimp].flatten(), \
+#                               emb._vhf_env[:nimp].flatten())
+#        e_frag = e1_frag + envhf_frag * .5 + cires['e2frag']
+#
+        vhf = emb._project_fock - emb._pure_hcore
+        e1 = numpy.dot(cires['rdm1'][:nimp].reshape(-1),
+                       (emb._pure_hcore + .5 * vhf)[:nimp].reshape(-1))
+        dm1 = emb.calc_den_mat(emb.mo_coeff_on_imp, emb.mo_occ)
+        vhf = emb.get_eff_potential(emb.mol, dm1)
+        e2 = cires['e2frag'] - .5*numpy.dot(cires['rdm1'][:nimp].reshape(-1),
+                                            vhf[:nimp].reshape(-1))
+        e_frag = e1 + e2
         n_frag = cires['rdm1'][:nimp].trace()
 
         log.info(self, '====================')
@@ -264,13 +273,13 @@ def fit_chempot(mol, emb, embsys, diff_nelec):
     try:
         sol = scipy.optimize.root(diff_nelec, chem_pot0, tol=1e-3, method='lm',
                                   options={'ftol':1e-3, 'maxiter':10})
+        log.debug(embsys, 'scipy.optimize summary %s', sol)
+        log.debug(embsys, 'chem potential = %.11g, nelec error = %.11g', \
+                  sol.x, sol.fun)
+        log.debug(embsys, '        ncall = %d, scipy.optimize success: %s', \
+                  sol.nfev, sol.success)
     except ImportError:
         sol = scipy.optimize.leastsq(diff_nelec, chem_pot0, ftol=1e-3, xtol=1e-3)
-    log.debug(embsys, 'scipy.optimize summary %s', sol)
-    log.debug(embsys, 'chem potential = %.11g, nelec error = %.11g', \
-              sol.x, sol.fun)
-    log.debug(embsys, '        ncall = %d, scipy.optimize success: %s', \
-              sol.nfev, sol.success)
     return sol.x
 
 

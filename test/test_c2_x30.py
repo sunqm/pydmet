@@ -38,6 +38,7 @@ print mf.scf()
 from pydmet import impsolver
 from pydmet import dmet_nonsc
 embsys = dmet_nonsc.EmbSys(mol, mf, [[0,1]])
+#embsys.basidx_group = [[1,2,3,4,6,7,8,9]]
 embsys.verbose = 5
 lib.logger.debug(embsys, '@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@')
 lib.logger.debug(embsys, 'embedding HF without chemical potential')

@@ -140,14 +140,16 @@ class OneImpOnCLUSTDUMP(OneImp):
     def init_dmet_scf(self, mol=None):
         effscf = self.entire_scf
         mo_orth = effscf.mo_coeff[:,effscf.mo_occ>1e-15]
-        self.imp_site, self.bath_orb, self.env_orb = \
-                dmet_hf.decompose_orbital(self, mo_orth, self.bas_on_frag)
 #        self.imp_site, self.bath_orb, self.env_orb = \
-#                decompose_orbital_with_impsite(self, mo_orth, self.bas_on_frag)
-        self.impbas_coeff = self.cons_impurity_basis()
-        #self.impbas_coeff = self._vasphf['EMBASIS']
-        log.debug(self, 'diff of impbas_coeff to readin embasis %.8g',
-                  abs(abs(self.impbas_coeff) - abs(self._vasphf['EMBASIS'])).sum())
+#                dmet_hf.decompose_orbital(self, mo_orth, self.bas_on_frag)
+        self.imp_site, self.bath_orb, self.env_orb = \
+                decompose_orbital_with_impsite(self, mo_orth, self.bas_on_frag)
+        #self.impbas_coeff = self.cons_impurity_basis()
+        self.impbas_coeff = self._vasphf['EMBASIS']
+        #print abs(abs(self.cons_impurity_basis()) - abs(self._vasphf['EMBASIS'])).sum()
+        #assert(0)
+        #log.debug(self, 'diff of impbas_coeff to readin embasis %.8g',
+        #          abs(abs(self.impbas_coeff) - abs(self._vasphf['EMBASIS'])).sum())
 
         self.nelectron = int(effscf.mo_occ.sum()) - self.env_orb.shape[1] * 2
         log.info(self, 'number of electrons for impurity  = %d', \
@@ -158,8 +160,9 @@ class OneImpOnCLUSTDUMP(OneImp):
         self.energy_by_env = 0
         nemb = self._vasphf['NEMB']
         c = numpy.dot(self.impbas_coeff.T, self._vasphf['MO_COEFF'])
-        vhf = numpy.dot(c*self._vasphf['MO_ENERGY'], c.T) \
-                - self._vasphf['H1EMB'].copy()
+#        vhf = numpy.dot(c*self._vasphf['MO_ENERGY'], c.T) \
+#                - self._vasphf['H1EMB']
+        vhf = self.mat_ao2impbas(self._vasphf['J'] +self._vasphf['K'])
 
         mocc = c[:,:self._vasphf['NELEC']/2]
         dmemb = numpy.dot(mocc, mocc.T)*2
@@ -175,7 +178,7 @@ class OneImpOnCLUSTDUMP(OneImp):
         return hf_energy, dm
 
     def get_hcore(self, mol=None):
-        return self._vasphf['H1EMB'].copy() + self._vhf_env
+        return self._vasphf['H1EMB'] + self._vhf_env
 
     def get_ovlp(self, mol=None):
         return numpy.eye(self._vasphf['NEMB'])
@@ -239,7 +242,6 @@ def read_clustdump(fcidump, jdump, kdump, fockdump):
             assert(abs(val[1]) < 1e-9)
         vj[i-1,j-1] = val[0]
         dat = finp.readline().split()
-    dic['J'] = vj
 
     finp = open(kdump, 'r')
     dat = finp.readline()
@@ -257,7 +259,6 @@ def read_clustdump(fcidump, jdump, kdump, fockdump):
         #    assert(abs(val[1]) < 1e-5)
         vk[i-1,j-1] = val[0]
         dat = finp.readline().split()
-    dic['K'] = vk
 
     finp = open(fockdump, 'r')
     dat = finp.readline()
@@ -279,7 +280,6 @@ def read_clustdump(fcidump, jdump, kdump, fockdump):
         else:
             fock[i-1,j-1] = val[0]
         dat = finp.readline().split()
-    dic['FOCK'] = fock
     dic['MO_ENERGY'] = mo_energy
 
     finp = open(fcidump, 'r')
@@ -329,6 +329,9 @@ def read_clustdump(fcidump, jdump, kdump, fockdump):
             eri[ij,kl] = eri[kl,ij] = val[0]
         dat = finp.readline().split()
     dic['MO_COEFF'] = mo_coeff
+    dic['FOCK'] = reduce(numpy.dot, (mo_coeff, fock, mo_coeff.T))
+    dic['J'] = reduce(numpy.dot, (mo_coeff, vj, mo_coeff.T))
+    dic['K'] = reduce(numpy.dot, (mo_coeff, vk, mo_coeff.T))
     dic['EMBASIS'] = numpy.dot(mo_coeff,embasis)
     dic['H1EMB'] = h1emb
     dic['ERI'] = eri
@@ -341,7 +344,7 @@ def fake_entire_scf(vasphf):
     mol.nelectron = vasphf['NELEC']
     fake_hf = scf.hf.RHF(mol)
     norb = vasphf['NORB']
-    hcore = vasphf['FOCK'] - (vasphf['J']-vasphf['K']*.5)
+    hcore = vasphf['FOCK'] - (vasphf['J']+vasphf['K'])
     fake_hf.get_hcore = lambda *args: hcore
     fake_hf.get_ovlp = lambda *args: numpy.eye(norb)
     def stop(*args):

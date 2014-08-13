@@ -172,6 +172,7 @@ class EmbSys(object):
             emb = self.OneImp(entire_scf)
             emb.occ_env_cutoff = 1e-14
             emb.imp_atoms = atm_lst
+            emb.imp_basidx = bas_idx
             emb.bas_on_frag = bas_idx
             emb.pre_orth_ao = self.pre_orth_ao
             emb.orth_ao_method = self.orth_ao_method
