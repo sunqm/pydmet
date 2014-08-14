@@ -451,7 +451,7 @@ class RHF(scf.hf.RHF):
         nbf = mo_coeff.shape[0]
         mo = mo_coeff[:,mo_occ>0]
         dm = numpy.dot(mo, mo.T.conj()) * 2
-        log.debug(self, 'density.diag = %s', dm.diagonal())
+        #log.debug(self, 'density.diag = %s', dm.diagonal())
         return dm
 
     def eri_on_impbas(self, mol):
@@ -1080,8 +1080,8 @@ class UHF(RHF, scf.hf.UHF):
         mo_b = mo_coeff[1][:,mo_occ[1]>0]
         dm_a = numpy.dot(mo_a, mo_a.T.conj())
         dm_b = numpy.dot(mo_b, mo_b.T.conj())
-        log.debug(self, 'alpha density.diag = %s', dm_a.diagonal())
-        log.debug(self, 'beta  density.diag = %s', dm_b.diagonal())
+        #log.debug(self, 'alpha density.diag = %s', dm_a.diagonal())
+        #log.debug(self, 'beta  density.diag = %s', dm_b.diagonal())
         return (dm_a,dm_b)
 
     def init_diis(self):

@@ -162,7 +162,7 @@ class OneImpOnCLUSTDUMP(OneImp):
         c = numpy.dot(self.impbas_coeff.T, self._vasphf['MO_COEFF'])
 #        vhf = numpy.dot(c*self._vasphf['MO_ENERGY'], c.T) \
 #                - self._vasphf['H1EMB']
-        vhf = self.mat_ao2impbas(self._vasphf['J'] +self._vasphf['K'])
+        vhf = self.mat_ao2impbas(self._vasphf['J']+self._vasphf['K'])
 
         mocc = c[:,:self._vasphf['NELEC']/2]
         dmemb = numpy.dot(mocc, mocc.T)*2

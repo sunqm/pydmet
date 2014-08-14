@@ -53,12 +53,30 @@ class EmbSys(dmet_sc.EmbSys):
         emb = self.embs[0]
         emb.verbose = self.verbose
         emb.imp_scf()
+        nimp = emb.dim_of_impurity()
 
+        log.info(self, '')
+        log.info(self, '===== CI/CC before Fitting =====')
+        cires = self.frag_fci_solver(mol, emb)
+        e_tot = cires['etot'] + emb.energy_by_env
+        vhf = emb._project_fock - emb._pure_hcore
+        e1 = numpy.dot(cires['rdm1'][:nimp].reshape(-1),
+                       (emb._pure_hcore + .5 * vhf)[:nimp].reshape(-1))
+        dm1 = emb.calc_den_mat(emb.mo_coeff_on_imp, emb.mo_occ)
+        vhf = emb.get_eff_potential(emb.mol, dm1)
+        e2 = cires['e2frag'] - .5*numpy.dot(cires['rdm1'][:nimp].reshape(-1),
+                                            vhf[:nimp].reshape(-1))
+        e_frag = e1 + e2
+        n_frag = cires['rdm1'][:nimp].trace()
+        log.info(self, 'e_tot = %.11g, e_frag = %.11g, nelec_frag = %.11g', \
+                 e_tot, e1+e2, n_frag)
+
+        log.info(self, '')
+        log.info(self, '===== Fitting chemical potential =====')
         vfit_ci = self.fitmethod_1shot(mol, emb, self)
         #self.update_embs_vfit_ci(mol, [emb], [vfit_ci])
         cires = self.frag_fci_solver(mol, emb, vfit_ci)
         e_tot = cires['etot'] + emb.energy_by_env
-        nimp = emb.dim_of_impurity()
         e1_frag = numpy.dot(cires['rdm1'][:nimp].flatten(), \
                             emb._pure_hcore[:nimp].flatten())
         envhf_frag = numpy.dot(cires['rdm1'][:nimp].flatten(), \
@@ -127,7 +145,25 @@ class EmbSysPeriod(EmbSys):
         emb = self.embs[0]
         emb.verbose = self.verbose
         #emb.imp_scf()
+        nimp = emb.dim_of_impurity()
 
+        log.info(self, '')
+        log.info(self, '===== CI/CC before Fitting =====')
+        cires = self.frag_fci_solver(mol, emb)
+        e_tot = cires['etot'] + emb.energy_by_env
+        vhf = emb._project_fock - emb._pure_hcore
+        e1 = numpy.dot(cires['rdm1'][:nimp].reshape(-1),
+                       (emb._pure_hcore + .5 * vhf)[:nimp].reshape(-1))
+        dm1 = emb.calc_den_mat(emb.mo_coeff_on_imp, emb.mo_occ)
+        vhf = emb.get_eff_potential(emb.mol, dm1)
+        e2 = cires['e2frag'] - .5*numpy.dot(cires['rdm1'][:nimp].reshape(-1),
+                                            vhf[:nimp].reshape(-1))
+        e_frag = e1 + e2
+        n_frag = cires['rdm1'][:nimp].trace()
+        log.info(self, 'e_tot = %.11g, e_frag = %.11g, nelec_frag = %.11g', \
+                 e_tot, e1+e2, n_frag)
+
+        log.info(self, '')
         log.info(self, '===== Fitting chemical potential =====')
         if self.pot_on.upper() == 'IMP':
             vfit_ci = fit_imp_fix_nelec(mol, emb, self)
@@ -140,7 +176,6 @@ class EmbSysPeriod(EmbSys):
 
         cires = self.frag_fci_solver(mol, emb, vfit_ci)
         e_tot = cires['etot'] + emb.energy_by_env
-        nimp = emb.dim_of_impurity()
 #        e1_frag = numpy.dot(cires['rdm1'][:nimp].flatten(), \
 #                            emb._pure_hcore[:nimp].flatten())
 #        envhf_frag = numpy.dot(cires['rdm1'][:nimp].flatten(), \
