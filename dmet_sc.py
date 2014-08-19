@@ -62,10 +62,7 @@ class EmbSys(object):
     def __init__(self, mol, entire_scf, frag_group=[], init_v=None,
                  orth_coeff=None):
         self.verbose = mol.verbose
-        try:
-            self.stdout = self.fout = mol.fout
-        except:
-            self.stdout = self.fout = mol.stdout
+        self.stdout = mol.stdout
         self.mol = mol
         self.emb_verbose = param.VERBOSE_QUITE
         self.OneImp = dmet_hf.RHF
@@ -490,13 +487,13 @@ class EmbSys(object):
     def dump_frag_prop_mat(self, mol, frag_mat_group):
         '''dump fragment potential or density matrix'''
         for m, atm_lst, bas_idx in self.uniq_frags:
-            mol.fout.write('fragment %d, %s\n' % (m,str(atm_lst)))
+            mol.stdout.write('fragment %d, %s\n' % (m,str(atm_lst)))
             try:
                 fmt = '    %10.5f' * frag_mat_group[m].shape[1] + '\n'
                 for c in numpy.array(frag_mat_group[m]):
-                    mol.fout.write(fmt % tuple(c))
+                    mol.stdout.write(fmt % tuple(c))
             except:
-                mol.fout.write(str(frag_mat_group[m]))
+                mol.stdout.write(str(frag_mat_group[m]))
 
     # for convergence criteria
     def diff_vfit(self, v_group, v_group_old):
@@ -520,7 +517,7 @@ class EmbSys(object):
         #    dm = numpy.dot(c[:,:nocc],c[:,:nocc].T) * 2
         #    fmt = '    %10.5f' * dm.shape[1] + '\n'
         #    for c in numpy.array(dm):
-        #        mol.fout.write(fmt % tuple(c))
+        #        mol.stdout.write(fmt % tuple(c))
 
         e_tot, v_mf_group, v_ci_group = dmet_sc_cycle(mol, self)
 
@@ -537,7 +534,7 @@ class EmbSys(object):
             log.debug(self, 'mean-field V_fitting in orth AO representation')
             fmt = '    %10.5f' * v_add.shape[1] + '\n'
             for c in numpy.array(v_add):
-                mol.fout.write(fmt % tuple(c))
+                mol.stdout.write(fmt % tuple(c))
 
             log.debug(self, '** mo_coeff of MF sys (on orthogonal AO) **')
             c = numpy.dot(numpy.linalg.inv(self.orth_coeff), \
@@ -623,7 +620,7 @@ def fit_without_local_scf(mol, emb, embsys):
 #?        log.debug(embsys, 'fitting potential for fragment %d\n' % frag_id)
 #?        fmt = '    %10.5f' * v_group[frag_id].shape[1] + '\n'
 #?        for c in numpy.array(v_group[frag_id]):
-#?            mol.fout.write(fmt % tuple(c))
+#?            mol.stdout.write(fmt % tuple(c))
 #?    return v_group
 
 def fit_with_local_scf(mol, embsys):

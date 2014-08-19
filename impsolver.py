@@ -9,6 +9,7 @@ from pyscf import gto
 from pyscf import scf
 from pyscf import lib
 from pyscf.lib import _vhf
+from pyscf.lib import _ao2mo
 from pyscf import ao2mo
 import psi4
 
@@ -42,13 +43,14 @@ def cc(mol, nelec, h1e, h2e, ptrace, mo, ccname='CCSD'):
     hf_energy, mo_energy, mo_occ, mo = \
             _scf_energy(h1e, h2e, mo, nelec/2)
     h1e = reduce(numpy.dot, (mo.T, h1e, mo))
-    eri1 = numpy.empty(h2e.size)
-    ij = 0
-    for i in range(h2e.shape[0]):
-        for j in range(i+1):
-            eri1[ij] = h2e[i,j]
-            ij += 1
-    eri = ao2mo.incore.full(eri1, mo)
+    eri = _ao2mo.partial_eri_o2(h2e, mo)
+    #eri1 = numpy.empty(h2e.size)
+    #ij = 0
+    #for i in range(h2e.shape[0]):
+    #    for j in range(i+1):
+    #        eri1[ij] = h2e[i,j]
+    #        ij += 1
+    #eri = ao2mo.incore.full(eri1, mo)
 
     ps = psi4.Solver(max_memory=1<<34)
     with psi4.capture_stdout():

@@ -708,7 +708,7 @@ def numfitor(dev, get_dm, walkers, dm_ref, \
 def fit_solver_quiet(fock0, nocc, nimp, dm_ref_alpha, \
                      v_domain, dm_domain, constr):
     dev = lambda: None
-    dev.fout = sys.stdout
+    dev.stdout = sys.stdout
     dev.verbose = 0
     return fit_solver(dev, fock0, nocc, nimp, dm_ref_alpha, \
                       v_domain, dm_domain, constr)
