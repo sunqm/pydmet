@@ -59,7 +59,7 @@ class OneImpNaiveNI(OneImp):
         eri_mo[:npair_imp,:npair_imp] = eri
         return eri_mo
 
-#    def get_eff_potential(self, mol, dm, dm_last=0, vhf_last=0):
+#    def get_veff(self, mol, dm, dm_last=0, vhf_last=0):
 #        if self._eri is None:
 #            self._eri = self.eri_on_impbas(mol)
 #        vj, vk = _vhf.vhf_jk_incore_o2(self._eri, dm)
@@ -76,7 +76,7 @@ class OneImpNI(OneImpNaiveNI):
         dmimp = effscf.calc_den_mat(mo_coeff=cs.T)
         dm = numpy.zeros_like(fock)
         dm[:nimp,:nimp] = dmimp[:nimp,:nimp]
-        h1e = fock - self.get_eff_potential(mol, dm)
+        h1e = fock - self.get_veff(mol, dm)
         return h1e
 
 
@@ -166,7 +166,7 @@ class OneImpOnCLUSTDUMP(OneImp):
 
         mocc = c[:,:self._vasphf['NELEC']/2]
         dmemb = numpy.dot(mocc, mocc.T)*2
-        vemb = self.get_eff_potential(mol, dmemb)
+        vemb = self.get_veff(mol, dmemb)
         return vhf - vemb
 
     def init_guess_method(self, mol):
@@ -192,7 +192,7 @@ class OneImpOnCLUSTDUMP(OneImp):
         self.init_dmet_scf(self.mol)
         self.scf_conv, self.hf_energy, self.mo_energy, self.mo_occ, \
                 self.mo_coeff_on_imp \
-                = self.scf_cycle(self.mol, self.scf_threshold, \
+                = self.scf_cycle(self.mol, self.conv_threshold, \
                                  dump_chk=False)
         self.mo_coeff = numpy.dot(self.impbas_coeff, self.mo_coeff_on_imp)
         if self.scf_conv:
@@ -201,15 +201,15 @@ class OneImpOnCLUSTDUMP(OneImp):
         else:
             log.log(self, 'SCF not converge.')
             log.log(self, 'electronic energy = %.15g after %d cycles.', \
-                    self.hf_energy, self.max_scf_cycle)
+                    self.hf_energy, self.max_cycle)
 
         dm = self.calc_den_mat(self.mo_coeff_on_imp, self.mo_occ)
-        vhf = self.get_eff_potential(self.mol, dm)
+        vhf = self.get_veff(self.mol, dm)
         self.e_frag, self.n_elec_frag = \
                 self.calc_frag_elec_energy(self.mol, vhf, dm)
         return self.hf_energy
 
-    def get_eff_potential(self, mol, dm, dm_last=0, vhf_last=0):
+    def get_veff(self, mol, dm, dm_last=0, vhf_last=0):
         if self._eri is None:
             self._eri = self.eri_on_impbas(mol)
         vj, vk = _vhf.vhf_jk_incore_o2(self._eri, dm)
@@ -349,7 +349,7 @@ def fake_entire_scf(vasphf):
     fake_hf.get_ovlp = lambda *args: numpy.eye(norb)
     def stop(*args):
         raise RuntimeError('fake_hf')
-    fake_hf.get_eff_potential = stop
+    fake_hf.get_veff = stop
     fake_hf.mo_coeff = vasphf['MO_COEFF']
     fake_hf.mo_energy = vasphf['MO_ENERGY']
     fake_hf.mo_occ = numpy.zeros(norb)

@@ -276,7 +276,7 @@ class EmbSys(object):
                 emb.get_ovlp = lambda mol: numpy.eye(emb._vhf_env.shape[0])
                 emb.scf_conv, emb.hf_energy, emb.mo_energy, emb.mo_occ, \
                         emb.mo_coeff_on_imp \
-                        = emb.scf_cycle(emb.mol, emb.scf_threshold, dump_chk=False)
+                        = emb.scf_cycle(emb.mol, emb.conv_threshold, dump_chk=False)
                 #ABORTemb.mo_coeff = numpy.dot(emb.impbas_coeff, emb.mo_coeff_on_imp)
                 del(emb.get_hcore)
                 del(emb.get_ovlp)
@@ -315,7 +315,7 @@ class EmbSys(object):
             if basidx_group:
                 log.warn(self, 'ignore basidx_group')
 # map_frag_atom_id_to_bas_index
-            lbl = mol.labels_of_spheric_GTO()
+            lbl = mol.spheric_labels()
             atm_basidx = [[] for i in range(mol.natm)]
             for ib, s in enumerate(lbl):
                 ia = s[0]
@@ -423,7 +423,7 @@ class EmbSys(object):
                                  self.orth_coeff)) + v_global
         h1e = h1e[self.bas_off_frags]
         dm_ao = reduce(numpy.dot, (self.orth_coeff,dm_mf,self.orth_coeff.T))
-        vhf = self.entire_scf.get_eff_potential(mol, dm_ao)
+        vhf = self.entire_scf.get_veff(mol, dm_ao)
         vhf = reduce(numpy.dot, (self.orth_coeff.T,vhf,self.orth_coeff))
         vhf = vhf[self.bas_off_frags]
         dm_frag = dm_mf[self.bas_off_frags]
@@ -745,7 +745,7 @@ def run_hf_with_ext_pot(mol, entire_scf, vext_on_ao, follow_state=False):
         #eff_scf = entire_scf.__class__(mol)
         eff_scf = copy.copy(entire_scf)
         eff_scf.verbose = 0#entire_scf.verbose
-        eff_scf.scf_threshold = 1e-9#entire_scf.scf_threshold
+        eff_scf.conv_threshold = 1e-9#entire_scf.conv_threshold
         eff_scf.diis_space = 8#entire_scf.diis_space
         eff_scf.scf_conv = False
         return eff_scf
@@ -801,7 +801,7 @@ def run_hf_with_ext_pot(mol, entire_scf, vext_on_ao, follow_state=False):
     log.debug(mol, 'SCF for entire molecule with fitting potential')
     eff_scf.scf_conv, eff_scf.hf_energy, eff_scf.mo_energy, \
             eff_scf.mo_occ, eff_scf.mo_coeff \
-            = eff_scf.scf_cycle(mol, eff_scf.scf_threshold, dump_chk=False)
+            = eff_scf.scf_cycle(mol, eff_scf.conv_threshold, dump_chk=False)
 
     # must release the modified get_hcore to get pure hcore
     del(eff_scf.get_hcore)

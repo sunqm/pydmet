@@ -132,7 +132,7 @@ def select_ao_on_fragment(mol, atm_lst, bas_idx=[]):
              str(atm_lst))
     log.info(mol, 'extra bas_idx of impurity sys: %s', \
              str(bas_idx))
-    lbl = mol.labels_of_spheric_GTO()
+    lbl = mol.spheric_labels()
     bas_on_a = []
     for ia in atm_lst: # ensure the order of imp_site consiste with imp_atoms
         for ib, s in enumerate(lbl):
@@ -294,7 +294,7 @@ class RHF(scf.hf.RHF):
 
         #if not entire_scf.scf_conv:
         #    log.info(self, "SCF again before DMET.")
-        #    entire_scf.scf_cycle(mol, entire_scf.scf_threshold*1e2)
+        #    entire_scf.scf_cycle(mol, entire_scf.conv_threshold*1e2)
         self.entire_scf = entire_scf
         self.mol = entire_scf.mol
 
@@ -326,8 +326,8 @@ class RHF(scf.hf.RHF):
         self._vhf_env = 0
         self.diis_start_cycle = 3
         self.diis_space = entire_scf.diis_space
-        self.scf_threshold = entire_scf.scf_threshold
-        self.max_scf_cycle = entire_scf.max_scf_cycle
+        self.conv_threshold = entire_scf.conv_threshold
+        self.max_cycle = entire_scf.max_cycle
         self.direct_scf = entire_scf.direct_scf
         self.direct_scf_threshold = entire_scf.direct_scf_threshold
         self.level_shift_factor = 0
@@ -378,7 +378,7 @@ class RHF(scf.hf.RHF):
         env_orb = numpy.dot(self.orth_coeff, env_orb)
         dm_env = numpy.dot(env_orb, env_orb.T.conj()) * 2
         #vj, vk = scf.hf.get_vj_vk(pycint.nr_vhf_o3, mol, dm_env)
-        vhf_env_ao = self.entire_scf.get_eff_potential(self.mol, dm_env)
+        vhf_env_ao = self.entire_scf.get_veff(self.mol, dm_env)
         hcore = self.entire_scf.get_hcore(mol)
         self.energy_by_env = lib.trace_ab(dm_env, hcore) \
                            + lib.trace_ab(dm_env, vhf_env_ao) * .5
@@ -402,8 +402,8 @@ class RHF(scf.hf.RHF):
         log.info(self, 'level shift factor = %g', self.level_shift_factor)
         log.info(self, 'DIIS start cycle = %d', self.diis_start_cycle)
         log.info(self, 'DIIS space = %d', self.diis_space)
-        log.info(self, 'SCF threshold = %g', self.scf_threshold)
-        log.info(self, 'max. SCF cycles = %d', self.max_scf_cycle)
+        log.info(self, 'SCF threshold = %g', self.conv_threshold)
+        log.info(self, 'max. SCF cycles = %d', self.max_cycle)
 
     def mat_ao2impbas(self, mat):
         c = self.impbas_coeff
@@ -465,17 +465,17 @@ class RHF(scf.hf.RHF):
         self._eri = None
 
 
-    def get_eff_potential(self, mol, dm, dm_last=0, vhf_last=0):
+    def get_veff(self, mol, dm, dm_last=0, vhf_last=0):
         if self._eri is None:
             self._eri = self.eri_on_impbas(mol)
         vj, vk = _vhf.vhf_jk_incore_o2(self._eri, dm)
         vhf = vj - vk * .5
         return vhf
 
-#    def get_eff_potential(self, mol, dm, dm_last=0, vhf_last=0):
+#    def get_veff(self, mol, dm, dm_last=0, vhf_last=0):
 #        dm = reduce(numpy.dot, (self.impbas_coeff, dm, \
 #                                self.impbas_coeff.T))
-#        vhf_ao = scf.hf.RHF.get_eff_potential(self.entire_scf, self.mol, dm)
+#        vhf_ao = scf.hf.RHF.get_veff(self.entire_scf, self.mol, dm)
 #        return self.mat_ao2impbas(vhf_ao)
 
     def frag_non_symm_projector(self, s1e):
@@ -536,7 +536,7 @@ environment two-electron part'''
 
         self.scf_conv, self.hf_energy, self.mo_energy, self.mo_occ, \
                 self.mo_coeff_on_imp \
-                = self.scf_cycle(self.mol, self.scf_threshold, \
+                = self.scf_cycle(self.mol, self.conv_threshold, \
                                  dump_chk=False)
 
         log.info(self, 'impurity MO energy')
@@ -556,7 +556,7 @@ environment two-electron part'''
         else:
             log.log(self, 'SCF not converge.')
             log.log(self, 'electronic energy = %.15g after %d cycles.', \
-                    self.hf_energy, self.max_scf_cycle)
+                    self.hf_energy, self.max_cycle)
 
         # mo_coeff_on_imp based on embedding basis + bath
         # mo_coeff based on AOs
@@ -572,7 +572,7 @@ environment two-electron part'''
         log.info(self, 'overlap of determinants after SCF = %.15g', (ovlp**2))
 
         dm = self.calc_den_mat(self.mo_coeff_on_imp, self.mo_occ)
-        vhf = self.get_eff_potential(self.mol, dm)
+        vhf = self.get_veff(self.mol, dm)
         self.e_frag, self.n_elec_frag = \
                 self.calc_frag_elec_energy(self.mol, vhf, dm)
         log.log(self, 'fragment electronic energy = %.15g', self.e_frag)
@@ -613,7 +613,7 @@ environment two-electron part'''
         dm_frag = numpy.dot(dm, self.frag_non_symm_projector(s1e))
         dm = reduce(numpy.dot, (c_frag, dm_frag, c_frag.T.conj()))
         pop = dm.diagonal()
-        label = mol.labels_of_spheric_GTO()
+        label = mol.spheric_labels()
 
         for i, s in enumerate(label):
             if s[0] in self.imp_atoms:
@@ -779,7 +779,7 @@ environment two-electron part'''
         self.append_bath(gho_atm_lst)
         self.num_bath = 1
         if inc_1s:
-            for i, s in enumerate(self.mol.labels_of_spheric_GTO()):
+            for i, s in enumerate(self.mol.spheric_labels()):
                 if s[0] == gho_atm_lst[0] and s[2] == '1s':
                     self.imp_basidx = [i]
                     break
@@ -966,7 +966,7 @@ class UHF(RHF, scf.hf.UHF):
         env_b = numpy.dot(self.orth_coeff, env_orb[1])
         dm_env = numpy.array([numpy.dot(env_a, env_a.T.conj()), \
                               numpy.dot(env_b, env_b.T.conj())])
-        vhf_env_ao = scf.hf.UHF.get_eff_potential(self.entire_scf, self.mol, dm_env)
+        vhf_env_ao = scf.hf.UHF.get_veff(self.entire_scf, self.mol, dm_env)
         hcore = scf.hf.UHF.get_hcore(mol)
         self.energy_by_env = lib.trace_ab(dm_env[0], hcore[0]) \
                            + lib.trace_ab(dm_env[1], hcore[1]) \
@@ -1009,12 +1009,12 @@ class UHF(RHF, scf.hf.UHF):
 
 
 # **** impurity SCF ****
-    def check_dm_converge(self, dm, dm_last, scf_threshold):
+    def check_dm_converge(self, dm, dm_last, conv_threshold):
         delta_dm = abs(dm[0]-dm_last[0]).sum() + abs(dm[1]-dm_last[1]).sum()
         dm_change = delta_dm/(abs(dm_last[0]).sum()+abs(dm_last[1]).sum())
         log.info(self, '          sum(delta_dm)=%g (~ %g%%)\n', \
                  delta_dm, dm_change*100)
-        return dm_change < scf_threshold*1e2
+        return dm_change < conv_threshold*1e2
 
     def init_guess_method(self, mol):
         log.debug(self, 'init guess based on entire MO coefficients')
@@ -1032,13 +1032,13 @@ class UHF(RHF, scf.hf.UHF):
         hf_energy = 0
         return hf_energy, numpy.array((dm_a,dm_b))
 
-    def get_eff_potential(self, mol, dm, dm_last=0, vhf_last=0):
+    def get_veff(self, mol, dm, dm_last=0, vhf_last=0):
         dm_a = reduce(numpy.dot, (self.impbas_coeff[0], dm[0], \
                                   self.impbas_coeff[0].T))
         dm_b = reduce(numpy.dot, (self.impbas_coeff[1], dm[1], \
                                   self.impbas_coeff[1].T))
         dm_ao = numpy.array((dm_a, dm_b))
-        vhf_ao = scf.hf.UHF.get_eff_potential(self.entire_scf, self.mol, dm_ao)
+        vhf_ao = scf.hf.UHF.get_veff(self.entire_scf, self.mol, dm_ao)
         return self.mat_ao2impbas(vhf_ao)
 
     def get_hcore(self, mol):
@@ -1126,7 +1126,7 @@ class UHF(RHF, scf.hf.UHF):
 
         self.scf_conv, self.hf_energy, self.mo_energy, self.mo_occ, \
                 self.mo_coeff_on_imp \
-                = self.scf_cycle(self.mol, self.scf_threshold, \
+                = self.scf_cycle(self.mol, self.conv_threshold, \
                                  dump_chk=False)
 
         def dump_mo_energy(mo_energy, mo_occ, title=''):
@@ -1147,7 +1147,7 @@ class UHF(RHF, scf.hf.UHF):
         else:
             log.log(self, 'SCF not converge.')
             log.log(self, 'electronic energy = %.15g after %d cycles.', \
-                    self.hf_energy, self.max_scf_cycle)
+                    self.hf_energy, self.max_cycle)
 
         # mo_coeff_on_imp based on embedding basis + bath
         # mo_coeff based on AOs
@@ -1169,7 +1169,7 @@ class UHF(RHF, scf.hf.UHF):
         log.info(self, 'overlap of determinants after SCF = %.15g', abs(ovlp * norm))
 
         dm = self.calc_den_mat(self.mo_coeff_on_imp, self.mo_occ)
-        vhf = self.get_eff_potential(self.mol, dm)
+        vhf = self.get_veff(self.mol, dm)
         self.e_frag, self.n_elec_frag = \
                 self.calc_frag_elec_energy(self.mol, vhf, dm)
         log.log(self, 'fragment electronic energy = %.15g', self.e_frag)
@@ -1220,7 +1220,7 @@ class UHF(RHF, scf.hf.UHF):
         dm_b = reduce(numpy.dot, (c_frag_b, dm_frag_b, c_frag_b.T.conj()))
         pop_a = dm_a.diagonal()
         pop_b = dm_b.diagonal()
-        label = mol.labels_of_spheric_GTO()
+        label = mol.spheric_labels()
 
         for i, s in enumerate(label):
             if s[0] in self.imp_atoms:
@@ -1301,7 +1301,7 @@ class UHF(RHF, scf.hf.UHF):
         self.append_bath(gho_atm_lst)
         self.num_bath = 1
         if inc_1s:
-            for i, s in enumerate(self.mol.labels_of_spheric_GTO()):
+            for i, s in enumerate(self.mol.spheric_labels()):
                 if s[0] == gho_atm_lst[0] and s[2] == '1s':
                     self.imp_basidx = [i]
                     break

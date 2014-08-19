@@ -29,10 +29,10 @@ def _scf_energy(h1e, h2e, mo, nocc):
         mo_occ[:nocc] = 2
         return mo_occ
     mf.set_mo_occ = _set_mo_occ
-    def _get_eff_potential(mol, dm, dm_last=0, vhf_last=0):
+    def _get_veff(mol, dm, dm_last=0, vhf_last=0):
         vj, vk = _vhf.vhf_jk_incore_o2(h2e, dm)
         return vj - vk * .5
-    mf.get_eff_potential = _get_eff_potential
+    mf.get_veff = _get_veff
 
     scf_conv, hf_energy, mo_energy, mo_occ, mo_coeff \
             = mf.scf_cycle(mol, 1e-9)

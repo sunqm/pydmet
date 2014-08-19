@@ -63,7 +63,7 @@ class EmbSys(dmet_sc.EmbSys):
         e1 = numpy.dot(cires['rdm1'][:nimp].reshape(-1),
                        (emb._pure_hcore + .5 * vhf)[:nimp].reshape(-1))
         dm1 = emb.calc_den_mat(emb.mo_coeff_on_imp, emb.mo_occ)
-        vhf = emb.get_eff_potential(emb.mol, dm1)
+        vhf = emb.get_veff(emb.mol, dm1)
         e2 = cires['e2frag'] - .5*numpy.dot(cires['rdm1'][:nimp].reshape(-1),
                                             vhf[:nimp].reshape(-1))
         e_frag = e1 + e2
@@ -155,7 +155,7 @@ class EmbSysPeriod(EmbSys):
         e1 = numpy.dot(cires['rdm1'][:nimp].reshape(-1),
                        (emb._pure_hcore + .5 * vhf)[:nimp].reshape(-1))
         dm1 = emb.calc_den_mat(emb.mo_coeff_on_imp, emb.mo_occ)
-        vhf = emb.get_eff_potential(emb.mol, dm1)
+        vhf = emb.get_veff(emb.mol, dm1)
         e2 = cires['e2frag'] - .5*numpy.dot(cires['rdm1'][:nimp].reshape(-1),
                                             vhf[:nimp].reshape(-1))
         e_frag = e1 + e2
@@ -186,7 +186,7 @@ class EmbSysPeriod(EmbSys):
         e1 = numpy.dot(cires['rdm1'][:nimp].reshape(-1),
                        (emb._pure_hcore + .5 * vhf)[:nimp].reshape(-1))
         dm1 = emb.calc_den_mat(emb.mo_coeff_on_imp, emb.mo_occ)
-        vhf = emb.get_eff_potential(emb.mol, dm1)
+        vhf = emb.get_veff(emb.mol, dm1)
         e2 = cires['e2frag'] - .5*numpy.dot(cires['rdm1'][:nimp].reshape(-1),
                                             vhf[:nimp].reshape(-1))
         e_frag = e1 + e2

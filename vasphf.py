@@ -62,7 +62,7 @@ class RHF(scf.hf.RHF):
 
         self.scf_conv, self.hf_energy, \
                 self.mo_energy, self.mo_occ, self.mo_coeff \
-                = self.scf_cycle(self.mol, self.scf_threshold)
+                = self.scf_cycle(self.mol, self.conv_threshold)
         return self.hf_energy
 
 class RHF4test(scf.hf.RHF):
@@ -103,7 +103,7 @@ class RHF4test(scf.hf.RHF):
 
         self.scf_conv, self.hf_energy, \
                 self.mo_energy, self.mo_occ, self.mo_coeff \
-                = self.scf_cycle(self.mol, self.scf_threshold)
+                = self.scf_cycle(self.mol, self.conv_threshold)
         return self.hf_energy
 
 def read_fcidump(fcidump):

@@ -52,7 +52,7 @@ class OneImpFractionNI(vaspimp.OneImpNI):
         dmimp = effscf.calc_den_mat(mo_coeff=sc)
         dm = numpy.zeros_like(fock)
         dm[:nimp,:nimp] = dmimp[:nimp,:nimp]
-        h1e = fock - self.get_eff_potential(mol, dm)
+        h1e = fock - self.get_veff(mol, dm)
         return h1e
 embsys = dmet_sc.EmbSys(mol, mf)
 embsys.OneImp = OneImpFractionNI
