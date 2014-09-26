@@ -294,6 +294,7 @@ class RHF(scf.hf.RHF):
         #    entire_scf.scf_cycle(mol, entire_scf.conv_threshold*1e2)
         self.entire_scf = entire_scf
         self.mol = entire_scf.mol
+        self.max_memory = self.entire_scf.max_memory
 
         self.imp_atoms = []
         self.imp_basidx = []
@@ -867,8 +868,8 @@ environment two-electron part'''
 class UHF(RHF, scf.hf.UHF):
     '''Non-relativistic unrestricted Hartree-Fock DMET'''
     def __init__(self, entire_scf, orth_ao=None):
-        assert(isinstance(entire_scf, scf.hf.UHF) \
-              or isinstance(entire_scf, scf.hf_symm.UHF))
+        #assert(isinstance(entire_scf, scf.hf.UHF) \
+        #      or isinstance(entire_scf, scf.hf_symm.UHF))
         RHF.__init__(self, entire_scf, orth_ao)
         self.nelectron_alpha = None
         self.nelectron_beta = None
@@ -921,7 +922,7 @@ class UHF(RHF, scf.hf.UHF):
                             impbas_coeff[0]))
         c_b = numpy.hstack((numpy.dot(self.orth_coeff, self.env_orb[1]), \
                             impbas_coeff[1]))
-        s = self.entire_scf.get_ovlp(self.mol)[0]
+        s = self.entire_scf.get_ovlp(self.mol)
         t_a = schmidt_orth_coeff(reduce(numpy.dot, (c_a.T.conj(), s, c_a)))
         t_b = schmidt_orth_coeff(reduce(numpy.dot, (c_b.T.conj(), s, c_b)))
         impbas_coeff = (numpy.dot(c_a, t_a)[:,self.env_orb[0].shape[1]:], \
@@ -932,7 +933,7 @@ class UHF(RHF, scf.hf.UHF):
         self.orth_coeff = self.get_orth_ao(mol)
         self.bas_on_frag = select_ao_on_fragment(mol, self.imp_atoms, \
                                                  self.imp_basidx)
-        c_inv = numpy.dot(self.orth_coeff.T, self.entire_scf.get_ovlp(self.mol)[0])
+        c_inv = numpy.dot(self.orth_coeff.T, self.entire_scf.get_ovlp(self.mol))
         mo_a, mo_b = self.entire_scf.mo_coeff
         occ_a, occ_b = self.entire_scf.mo_occ
         mo_orth_a = numpy.dot(c_inv, mo_a[:,self.entire_scf.mo_occ[0]>1e-15])
@@ -1015,7 +1016,7 @@ class UHF(RHF, scf.hf.UHF):
 
     def init_guess_method(self, mol):
         log.debug(self, 'init guess based on entire MO coefficients')
-        s = self.entire_scf.get_ovlp(self.mol)[0]
+        s = self.entire_scf.get_ovlp(self.mol)
         eff_scf = self.entire_scf
         entire_scf_dm = eff_scf.calc_den_mat(eff_scf.mo_coeff, eff_scf.mo_occ)
         env_a = numpy.dot(self.orth_coeff, self.env_orb[0])
@@ -1028,6 +1029,13 @@ class UHF(RHF, scf.hf.UHF):
         dm_b = reduce(numpy.dot, (cs_b, entire_scf_dm[1]-dm_b, cs_b.T.conj()))
         hf_energy = 0
         return hf_energy, numpy.array((dm_a,dm_b))
+
+#    def eri_on_impbas(self, mol):
+#        if self.entire_scf._eri is not None:
+#            eri = ao2mo.incore.full(self.entire_scf._eri, self.impbas_coeff)
+#        else:
+#            eri = ao2mo.direct.full_iofree(mol, self.impbas_coeff)
+#        return eri
 
     def get_veff(self, mol, dm, dm_last=0, vhf_last=0):
         dm_a = reduce(numpy.dot, (self.impbas_coeff[0], dm[0], \
@@ -1048,7 +1056,7 @@ class UHF(RHF, scf.hf.UHF):
     def eig(self, fock, s):
         c_a, e_a, info = lapack.dsygv(fock[0], s[0])
         c_b, e_b, info = lapack.dsygv(fock[1], s[1])
-        return (e_a,e_b), (c_a,c_b), info
+        return (e_a,e_b), (c_a,c_b)
 
     def set_mo_occ(self, mo_energy, mo_coeff=None):
         mo_occ = [numpy.zeros_like(mo_energy[0]), \
@@ -1102,15 +1110,15 @@ class UHF(RHF, scf.hf.UHF):
                 f = (f1[:f[0].size].reshape(f[0].shape), \
                      f1[f[0].size:].reshape(f[1].shape))
             if cycle < self.diis_start_cycle-1:
-                f = (self.damping(s[0], d[0], f[0], self.damp_factor), \
-                     self.damping(s[1], d[1], f[1], self.damp_factor))
-                f = (self.level_shift(s[0],d[0],f[0],self.level_shift_factor), \
-                     self.level_shift(s[1],d[1],f[1],self.level_shift_factor))
+                f = (scf.hf.damping(s[0], d[0], f[0], self.damp_factor), \
+                     scf.hf.damping(s[1], d[1], f[1], self.damp_factor))
+                f = (scf.hf.level_shift(s[0],d[0],f[0],self.level_shift_factor), \
+                     scf.hf.level_shift(s[1],d[1],f[1],self.level_shift_factor))
             else:
                 fac = self.level_shift_factor \
                         * numpy.exp(self.diis_start_cycle-cycle-1)
-                f = (self.level_shift(s[0], d[0], f[0], fac), \
-                     self.level_shift(s[1], d[1], f[1], fac))
+                f = (scf.hf.level_shift(s[0], d[0], f[0], fac), \
+                     scf.hf.level_shift(s[1], d[1], f[1], fac))
             return f
         return scf_diis
 
@@ -1146,24 +1154,24 @@ class UHF(RHF, scf.hf.UHF):
             log.log(self, 'electronic energy = %.15g after %d cycles.', \
                     self.hf_energy, self.max_cycle)
 
-        # mo_coeff_on_imp based on embedding basis + bath
-        # mo_coeff based on AOs
-        c_a = numpy.dot(self.impbas_coeff[0], self.mo_coeff_on_imp[0])
-        c_b = numpy.dot(self.impbas_coeff[1], self.mo_coeff_on_imp[1])
-        self.mo_coeff = (c_a,c_b)
-        s = self.entire_scf.get_ovlp(self.mol)[0]
-        mo0_a = self.entire_scf.mo_coeff[0][:,self.entire_scf.mo_occ[0]>0]
-        mo0_b = self.entire_scf.mo_coeff[1][:,self.entire_scf.mo_occ[1]>0]
-        mo1_a = numpy.hstack((c_a[:,self.mo_occ[0]>0], \
-                              numpy.dot(self.orth_coeff, self.env_orb[0])))
-        mo1_b = numpy.hstack((c_b[:,self.mo_occ[1]>0], \
-                              numpy.dot(self.orth_coeff, self.env_orb[1])))
-        norm = 1/numpy.sqrt( \
-                numpy.linalg.det(reduce(numpy.dot,  (mo1_a.T.conj(),s,mo1_a)))\
-                * numpy.linalg.det(reduce(numpy.dot,(mo1_b.T.conj(),s,mo1_b))))
-        ovlp = numpy.linalg.det(reduce(numpy.dot,  (mo0_a.T.conj(),s,mo1_a))) \
-               * numpy.linalg.det(reduce(numpy.dot,(mo0_b.T.conj(),s,mo1_b)))
-        log.info(self, 'overlap of determinants after SCF = %.15g', abs(ovlp * norm))
+#        # mo_coeff_on_imp based on embedding basis + bath
+#        # mo_coeff based on AOs
+#        c_a = numpy.dot(self.impbas_coeff[0], self.mo_coeff_on_imp[0])
+#        c_b = numpy.dot(self.impbas_coeff[1], self.mo_coeff_on_imp[1])
+#        self.mo_coeff = (c_a,c_b)
+#        s = self.entire_scf.get_ovlp(self.mol)
+#        mo0_a = self.entire_scf.mo_coeff[0][:,self.entire_scf.mo_occ[0]>0]
+#        mo0_b = self.entire_scf.mo_coeff[1][:,self.entire_scf.mo_occ[1]>0]
+#        mo1_a = numpy.hstack((c_a[:,self.mo_occ[0]>0], \
+#                              numpy.dot(self.orth_coeff, self.env_orb[0])))
+#        mo1_b = numpy.hstack((c_b[:,self.mo_occ[1]>0], \
+#                              numpy.dot(self.orth_coeff, self.env_orb[1])))
+#        norm = 1/numpy.sqrt( \
+#                numpy.linalg.det(reduce(numpy.dot,  (mo1_a.T.conj(),s,mo1_a)))\
+#                * numpy.linalg.det(reduce(numpy.dot,(mo1_b.T.conj(),s,mo1_b))))
+#        ovlp = numpy.linalg.det(reduce(numpy.dot,  (mo0_a.T.conj(),s,mo1_a))) \
+#               * numpy.linalg.det(reduce(numpy.dot,(mo0_b.T.conj(),s,mo1_b)))
+#        log.info(self, 'overlap of determinants after SCF = %.15g', abs(ovlp * norm))
 
         dm = self.calc_den_mat(self.mo_coeff_on_imp, self.mo_occ)
         vhf = self.get_veff(self.mol, dm)
@@ -1205,7 +1213,7 @@ class UHF(RHF, scf.hf.UHF):
         '''Mulliken M_ij = D_ij S_ji, Mulliken chg_i = \sum_j M_ij'''
         mol = self.mol
         log.info(self, ' ** Mulliken pop alpha/beta (on impurity basis)  **')
-        c_inv = numpy.dot(self.orth_coeff.T, self.entire_scf.get_ovlp(mol)[0])
+        c_inv = numpy.dot(self.orth_coeff.T, self.entire_scf.get_ovlp(mol))
         c_frag_a = numpy.dot(c_inv, self.impbas_coeff[0])
         c_frag_b = numpy.dot(c_inv, self.impbas_coeff[1])
         dm = self.calc_den_mat(self.mo_coeff_on_imp, self.mo_occ)
@@ -1244,7 +1252,7 @@ class UHF(RHF, scf.hf.UHF):
 
     def diff_dm(self):
         mol = self.mol
-        s = self.entire_scf.get_ovlp(self.mol)[0]
+        s = self.entire_scf.get_ovlp(self.mol)
         c_inv = numpy.dot(self.orth_coeff.T, s)
         eff_scf = self.entire_scf
         mo_a = numpy.dot(c_inv, eff_scf.mo_coeff[0])
@@ -1382,7 +1390,7 @@ class UHF(RHF, scf.hf.UHF):
         '''det(<i*|i>):  |i*> = P|i>,  P = |x>S^{-1}<x|'''
         mo_a = self.entire_scf.mo_coeff[0][:,self.entire_scf.mo_occ[0]>0]
         mo_b = self.entire_scf.mo_coeff[1][:,self.entire_scf.mo_occ[1]>0]
-        s = self.entire_scf.get_ovlp(self.mol)[0]
+        s = self.entire_scf.get_ovlp(self.mol)
         orbsa = numpy.hstack((orbs[0], numpy.dot(self.orth_coeff, self.env_orb[0])))
         orbsb = numpy.hstack((orbs[1], numpy.dot(self.orth_coeff, self.env_orb[1])))
         sinva = numpy.linalg.inv(reduce(numpy.dot, (orbsa.T, s, orbsa)))

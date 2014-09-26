@@ -11,6 +11,8 @@ from pyscf import lib
 from pyscf.lib import _vhf
 from pyscf.lib import _ao2mo
 from pyscf import ao2mo
+from pyscf.future import mcscf
+from pyscf.future import fci
 import psi4
 
 FCIEXE = os.path.dirname(__file__) + '/fci'
@@ -72,8 +74,7 @@ def cc(mol, nelec, h1e, h2e, ptrace, mo, ccname='CCSD'):
     frag_rdm1 = numpy.dot(p, rdm1)
     e1_ptrace = numpy.dot(frag_rdm1.reshape(-1), h1e.reshape(-1))
 
-    import dmet_misc
-    eri_full = dmet_misc.restore_full_eri(eri, nmo)
+    eri_full = ao2mo.restore(1, eri, nmo).transpose(0,2,1,3)
     #eri_full = numpy.empty((nmo,nmo,nmo,nmo))
     #ij = 0
     #for i in range(nmo):
@@ -190,3 +191,30 @@ def use_local_solver(local_solver, with_rdm1=None):
         return res
     return imp_solver
 
+
+#FIXME
+def casscf(mol, emb, vfit=0):
+    mc = mcscf.CASSCF(mol, emb, ncas, nelecas, ncore)
+    def get_hcore(*args):
+        h1e = emb.get_hcore(mol)
+        if not (isinstance(vfit, int) and vfit is 0):
+            nv = vfit.shape[0]
+            h1e[:nv,:nv] += vfit
+        return h1e
+    mc.get_hcore = get_hcore
+    e_tot, e_ci, ci0, mo = mc.mc1step(mo=emb.mo_coeff_on_imp)
+    import mcscf
+    dm1, dm2 = mcscf.addons.make_rdm12(mc, ci0, mo)
+    eri_full = ao2mo.restore(1, emb._eri, nmo)
+    e1_ptrace = numpy.dot(frag_rdm1.reshape(-1), h1e.reshape(-1))
+
+    frag_rdm2 = numpy.dot(p, rdm2.reshape(nmo,-1))
+    e2_ptrace = numpy.dot(frag_rdm2.reshape(-1), eri_full.reshape(-1))
+    e_ptrace = e1_ptrace + e2_ptrace * .5
+    res = {'rdm1': dm1,
+           #'escf': hf_energy,
+           'etot': e_tot,
+           'e1frag': e1_ptrace,
+           'e2frag': e2_ptrace*.5}
+
+    return res

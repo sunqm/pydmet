@@ -598,7 +598,7 @@ def fit_solver(dev, fock0, nocc, nimp, dm_ref_alpha, \
     dm_V = select_dm(dm_domain, nemb, nimp)
     if constr == NO_CONSTRAINT:
         fitp = DmFitObj(fock0, nocc, nimp, dm_ref_alpha, v_V, dm_V)
-        if 1:
+        if 0:
             #x = scipy.optimize.minimize(fitp.norm_ddm, fitp.init_guess(), \
             #                            method='Newton-CG', \
             #                            jac=fitp.grad, hess=fitp.hess, \

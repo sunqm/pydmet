@@ -453,6 +453,8 @@ class EmbSys(object):
                 cires = self.frag_fci_solver(mol, emb, emb.vfit_ci)
                 e_frag, nelec_frag = \
                         extract_partial_trace(emb, cires, self.env_pot_for_fci)
+                log.debug(self, 'e_frag = %.12g, nelec_frag = %.12g', \
+                          e_frag, nelec_frag)
             e_tot += e_frag
             nelec += nelec_frag
             last_frag = m
@@ -605,6 +607,15 @@ def fit_without_local_scf(mol, emb, embsys):
                               embsys.dm_fit_constraint)
     if embsys.fitpot_damp_fac > 0:
         dv *= embsys.fitpot_damp_fac
+    #if dv.size > emb.vfit_mf.size:
+    #    nv = emb.vfit_mf.shape[0]
+    #    dv[:nv,:nv] += emb.vfit_mf
+    #    return dv
+    #else:
+    #    nv = dv.shape[0]
+    #    dv1 = emb.vfit_mf.copy()
+    #    dv1[:nv,:nv] + dv
+    #    return dv1
     return dv + emb.vfit_mf
 
 #?def fit_pot_1shot(mol, embsys, frag_id=0):
@@ -830,11 +841,11 @@ def extract_partial_trace(emb, cires, with_env_pot=False):
                          emb._vhf_env[:nimp].flatten()) * .5
     e2 = cires['e2frag']
     nelec_frag = rdm1[:nimp].trace()
-    log.debug(emb, 'fragment e1 = %.12g, e2env_hf = %.12g, FCI pTraceSys = %.12g', \
-              e1, e2env_hf, e2)
+    e_frag = e1 + e2env_hf + e2
+    log.debug(emb, 'fragment e1 = %.12g, e2env_hf = %.12g, FCI pTraceSys = %.12g, sum = %.12g', \
+              e1, e2env_hf, e2, e_frag)
     log.debug(emb, 'fragment e2env_hf = %.12g, FCI pTraceSys = %.12g, nelec = %.12g', \
               e2env_hf, e2, nelec_frag)
-    e_frag = e1 + e2env_hf + e2
     return e_frag, nelec_frag
 
 
