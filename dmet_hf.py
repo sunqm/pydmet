@@ -89,7 +89,8 @@ def decompose_den_mat(emb, dm_orth, bas_on_frag, num_bath=-1):
     env_orb = env_orb[:,w>.1] #remove orbitals with eigenvalue ~ 0
     return numpy.eye(nimp), bath_orb, env_orb
 
-def decompose_orbital(emb, mo_orth, bas_on_frag, num_bath=-1):
+def decompose_orbital(emb, mo_orth, bas_on_frag, num_bath=-1,
+                      gen_imp_site=False):
     log.debug(emb, 'occupied mo shape = %d, %d', *mo_orth.shape)
     log.debug(emb, 'number of basis on fragment = %d', \
               bas_on_frag.__len__())
@@ -126,18 +127,24 @@ def decompose_orbital(emb, mo_orth, bas_on_frag, num_bath=-1):
         #log.debug(emb, ' ** env orbital coefficients (on orthogonal basis)**')
         #scf.hf.dump_orbital_coeff(emb.mol, env_orb)
 
+    if gen_imp_site:
+        imp_site = mo_bath[bas_on_frag]/w[idx]
+    else:
+        nimp = len(bas_on_frag)
+        imp_site = numpy.eye(nimp)
+
     if mo_bath.shape[1] > 0:
         mo_bath[bas_on_frag] = 0
         norm = 1/numpy.sqrt(1-w[idx]**2)
         bath_orb = mo_bath * norm
     else:
         bath_orb = mo_bath
+
     #if emb.verbose >= param.VERBOSE_DEBUG:
     #    log.debug(emb, ' ** bath orbital coefficients (on orthogonal basis) **')
     #    scf.hf.dump_orbital_coeff(emb.mol, bath_orb)
 
-    nimp = bas_on_frag.__len__()
-    return numpy.eye(nimp), bath_orb, env_orb
+    return imp_site, bath_orb, env_orb
 
 def padding0(mat, dims):
     mat0 = numpy.zeros(dims)

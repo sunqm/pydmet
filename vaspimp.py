@@ -17,8 +17,9 @@ class OneImp(dmet_hf.RHF):
         dmet_hf.RHF.__init__(self, entire_scf)
         self.bas_on_frag = basidx
 
-    def init_dmet_scf(self, mol=None):
+    def build_(self, mol=None):
         effscf = self.entire_scf
+        self._eri = self.eri_on_impbas(mol)
         c_inv = numpy.dot(self.orth_coeff.T, self.entire_scf.get_ovlp(mol))
         mo_orth = numpy.dot(c_inv, effscf.mo_coeff[:,effscf.mo_occ>1e-15])
         self.imp_site, self.bath_orb, self.env_orb = \
@@ -28,7 +29,8 @@ class OneImp(dmet_hf.RHF):
         self.nelectron = int(effscf.mo_occ.sum()) - self.env_orb.shape[1] * 2
         log.info(self, 'number of electrons for impurity  = %d', \
                  self.nelectron)
-        self._vhf_env = self.init_vhf_env(mol, self.env_orb)
+        self.energy_by_env, self._vhf_env = \
+                self.init_vhf_env(self.env_orb)
 
     def get_orth_ao(self, mol):
         s = self.entire_scf.get_ovlp(mol)
@@ -57,14 +59,7 @@ class OneImpNaiveNI(OneImp):
         #eri_mo[:npair_imp*(npair_imp+1)/2] = eri.reshape(-1)
         eri_mo = numpy.zeros((npair,npair))
         eri_mo[:npair_imp,:npair_imp] = eri
-        return eri_mo
-
-#    def get_veff(self, mol, dm, dm_last=0, vhf_last=0):
-#        if self._eri is None:
-#            self._eri = self.eri_on_impbas(mol)
-#        vj, vk = _vhf.vhf_jk_incore_o2(self._eri, dm)
-#        vhf = vj - vk * .5
-#        return vhf
+        return ao2mo.restore(8, eri_mo, nemb)
 
 
 class OneImpNI(OneImpNaiveNI):
@@ -81,54 +76,6 @@ class OneImpNI(OneImpNaiveNI):
 
 
 ##########################################################################
-def decompose_orbital_with_impsite(emb, mo_orth, bas_on_frag, num_bath=-1):
-    log.debug(emb, 'occupied mo shape = %d, %d', *mo_orth.shape)
-    log.debug(emb, 'number of basis on fragment = %d', \
-              bas_on_frag.__len__())
-
-    log.debug(emb, '*** decompose orbitals to fragment sites, '\
-              'bath, env orbitals ***')
-
-    fmo = mo_orth[bas_on_frag]
-    pre_nao, w1, pre_env_h = numpy.linalg.svd(fmo)
-    mo1 = numpy.dot(mo_orth, pre_env_h.T.conj())
-    w = numpy.zeros(mo_orth.shape[1])
-    w[:w1.size] = w1   # when nimp < nmo, adding 0s by the end
-
-    idx, not_idx, rest_idx = dmet_hf._pick_bath_idx(w1**2, num_bath, emb.occ_env_cutoff)
-    env_idx = not_idx + range(w1.size, mo_orth.shape[1])
-    mo_bath = mo1[:,idx]
-    env_orb = mo1[:,env_idx]
-    log.info(emb, 'number of proto bath orbital = %d', mo_bath.shape[1])
-    log.info(emb, 'number of env orbitals = %d', env_orb.shape[1])
-    log.debug(emb, 'entanglement weight (= sqrt(occs)),  occ')
-    if emb.verbose >= param.VERBOSE_DEBUG:
-        for i in idx:
-            log.debug(emb, '%d th weight = %12.9f, %12.9f  => bath (%s)', \
-                      i, w[i], w[i]**2, \
-                      ('acceptor' if w[i]**2>0.5 else 'donor'))
-        for i in env_idx:
-            log.debug(emb, '%d th weight = %12.9f, %12.9f  => env', \
-                      i, w[i], w[i]**2)
-        for i in rest_idx:
-            log.debug(emb, '%d th weight = %12.9f, %12.9f => rest/imp', \
-                      i, w[i], w[i]**2)
-        log.debug(emb, 'potentially change in embsys charge = %12.9f', \
-                  sum(w[not_idx]**2)+sum(w[rest_idx]**2-1))
-        #log.debug(emb, ' ** env orbital coefficients (on orthogonal basis)**')
-        #scf.hf.dump_orbital_coeff(emb.mol, env_orb)
-
-    imp_site = mo_bath[bas_on_frag]/w[idx]
-    if mo_bath.shape[1] > 0:
-        mo_bath[bas_on_frag] = 0
-        norm = 1/numpy.sqrt(1-w[idx]**2)
-        bath_orb = mo_bath * norm
-    else:
-        bath_orb = mo_bath
-    #if emb.verbose >= param.VERBOSE_DEBUG:
-    #    log.debug(emb, ' ** bath orbital coefficients (on orthogonal basis) **')
-    #    scf.hf.dump_orbital_coeff(emb.mol, bath_orb)
-    return imp_site, bath_orb, env_orb
 
 class OneImpOnCLUSTDUMP(OneImp):
     def __init__(self, entire_scf, vasphf):
@@ -137,13 +84,15 @@ class OneImpOnCLUSTDUMP(OneImp):
         self.bas_on_frag = self._vasphf['ORBIND']
         self._eri = vasphf['ERI']
 
-    def init_dmet_scf(self, mol=None):
+    def build_(self, mol=None):
         effscf = self.entire_scf
+        self._eri = self.eri_on_impbas(mol)
         mo_orth = effscf.mo_coeff[:,effscf.mo_occ>1e-15]
 #        self.imp_site, self.bath_orb, self.env_orb = \
 #                dmet_hf.decompose_orbital(self, mo_orth, self.bas_on_frag)
         self.imp_site, self.bath_orb, self.env_orb = \
-                decompose_orbital_with_impsite(self, mo_orth, self.bas_on_frag)
+                dmet_hf.decompose_orbital(self, mo_orth, self.bas_on_frag,
+                                          gen_imp_site=True)
         #self.impbas_coeff = self.cons_impurity_basis()
         self.impbas_coeff = self._vasphf['EMBASIS']
         #print abs(abs(self.cons_impurity_basis()) - abs(self._vasphf['EMBASIS'])).sum()
@@ -154,7 +103,8 @@ class OneImpOnCLUSTDUMP(OneImp):
         self.nelectron = int(effscf.mo_occ.sum()) - self.env_orb.shape[1] * 2
         log.info(self, 'number of electrons for impurity  = %d', \
                  self.nelectron)
-        self._vhf_env = self.init_vhf_env(mol, self.env_orb)
+        self.energy_by_env, self._vhf_env = \
+                self.init_vhf_env(self.env_orb)
 
     def init_vhf_env(self, mol, env_orb):
         self.energy_by_env = 0
@@ -184,12 +134,12 @@ class OneImpOnCLUSTDUMP(OneImp):
         return numpy.eye(self._vasphf['NEMB'])
 
     def eri_on_impbas(self, mol):
-        return self._vasphf['ERI']
+        return ao2mo.restore(8, self._vasphf['ERI'], self._vasphf['NEMB'])
 
     def imp_scf(self):
         self.orth_coeff = self.get_orth_ao(self.mol)
-        self.dump_options()
-        self.init_dmet_scf(self.mol)
+        self.dump_flags()
+        self.build_(self.mol)
         self.scf_conv, self.hf_energy, self.mo_energy, self.mo_occ, \
                 self.mo_coeff_on_imp \
                 = self.scf_cycle(self.mol, self.conv_threshold, \
@@ -208,13 +158,6 @@ class OneImpOnCLUSTDUMP(OneImp):
         self.e_frag, self.n_elec_frag = \
                 self.calc_frag_elec_energy(self.mol, vhf, dm)
         return self.hf_energy
-
-    def get_veff(self, mol, dm, dm_last=0, vhf_last=0):
-        if self._eri is None:
-            self._eri = self.eri_on_impbas(mol)
-        vj, vk = _vhf.vhf_jk_incore_o2(self._eri, dm)
-        vhf = vj - vk * .5
-        return vhf
 
     def dim_of_impurity(self):
         return self._vasphf['NIMP']
