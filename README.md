@@ -1,4 +1,2 @@
 pydmet
 ======
-
-dmet interface

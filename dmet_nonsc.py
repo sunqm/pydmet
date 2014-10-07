@@ -53,7 +53,7 @@ class EmbSys(dmet_sc.EmbSys):
         emb = self.embs[0]
         emb.verbose = self.verbose
         emb.imp_scf()
-        nimp = emb.dim_of_impurity()
+        nimp = len(emb.bas_on_frag)
 
         log.info(self, '')
         log.info(self, '===== CI/CC before Fitting =====')
@@ -145,7 +145,7 @@ class EmbSysPeriod(EmbSys):
         emb = self.embs[0]
         emb.verbose = self.verbose
         #emb.imp_scf()
-        nimp = emb.dim_of_impurity()
+        nimp = len(emb.bas_on_frag)
 
         log.info(self, '')
         log.info(self, '===== CI/CC before Fitting =====')
@@ -211,7 +211,7 @@ class EmbSysPeriod(EmbSys):
 def fit_imp_fix_nelec(mol, emb, embsys):
     log.debug(embsys, 'fit_imp_fix_nelec')
     nemb = emb.impbas_coeff.shape[1]
-    nimp = emb.dim_of_impurity()
+    nimp = len(emb.bas_on_frag)
     nelec_frag = emb._project_nelec_frag # which is projected from lattice HF
     vadd = _chem_pot_on_imp
     def diff_nelec(v):
@@ -224,7 +224,7 @@ def fit_imp_fix_nelec(mol, emb, embsys):
 
 def fit_bath_fix_nelec(mol, emb, embsys):
     log.debug(embsys, 'fit_bath_fix_nelec')
-    nimp = emb.dim_of_impurity()
+    nimp = len(emb.bas_on_frag)
     nelec_frag = emb._project_nelec_frag
     vadd = _chem_pot_on_bath
     def diff_nelec(v):
@@ -236,7 +236,7 @@ def fit_bath_fix_nelec(mol, emb, embsys):
 
 def fit_imp_float_nelec(mol, emb, embsys):
     log.debug(embsys, 'fit_imp_float_nelec')
-    nimp = emb.dim_of_impurity()
+    nimp = len(emb.bas_on_frag)
     vadd = _chem_pot_on_imp
     def diff_nelec(v):
         vmat = vadd(emb, v)
@@ -253,7 +253,7 @@ def fit_imp_float_nelec(mol, emb, embsys):
 
 def fit_bath_float_nelec(mol, emb, embsys):
     log.debug(embsys, 'fit_bath_float_nelec')
-    nimp = emb.dim_of_impurity()
+    nimp = len(emb.bas_on_frag)
     vadd = _chem_pot_on_bath
     def diff_nelec(v):
         vmat = vadd(emb, v)
@@ -274,7 +274,7 @@ def fit_bath_float_nelec(mol, emb, embsys):
 #     chemical potentail on bath for embedding-HF
 def fit_mix_float_nelec(mol, emb, embsys):
     log.debug(embsys, 'fit_bath_float_nelec')
-    nimp = emb.dim_of_impurity()
+    nimp = len(emb.bas_on_frag)
     def diff_nelec(v):
         h1e = emb.get_hcore(mol) + _chem_pot_on_imp(emb, v)
         nocc = emb.nelectron / 2
@@ -289,7 +289,7 @@ def fit_mix_float_nelec(mol, emb, embsys):
 
 def _chem_pot_on_imp(emb, v):
     nemb = emb.impbas_coeff.shape[1]
-    nimp = emb.dim_of_impurity()
+    nimp = len(emb.bas_on_frag)
     vmat = numpy.zeros((nemb,nemb))
     for i in range(nimp):
         vmat[i,i] = v
@@ -297,7 +297,7 @@ def _chem_pot_on_imp(emb, v):
 
 def _chem_pot_on_bath(emb, v):
     nemb = emb.impbas_coeff.shape[1]
-    nimp = emb.dim_of_impurity()
+    nimp = len(emb.bas_on_frag)
     vmat = numpy.zeros((nemb,nemb))
     for i in range(nimp,nemb):
         vmat[i,i] = v

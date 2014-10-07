@@ -35,6 +35,7 @@ def simple_inp(method, nmo, nelec, do_rdm1=False):
     geom = '\n'.join(hchain)
     charge = nmo - nelec
     tmpl = '''
+memory,1000,m
 aoint,c_final=0
 symmetry,nosym
 basis={
@@ -105,6 +106,45 @@ def call_molpro(emb, inputstr):
     shutil.rmtree(tdir)
     return e, rdm1
 
+#FIXME
+def casscf_inp(method, nmo, nelec, do_rdm1=False):
+    hchain = ['he 0. 0. %8.4f'%i for i in range(nmo/2)]
+    geom = '\n'.join(hchain)
+    charge = nmo - nelec
+    tmpl = '''
+memory,1000,m
+aoint,c_final=0
+symmetry,nosym
+basis={
+default=sto-3g,
+he=3-21g,
+h=sto-3g,
+}
+geometry={ %s }''' % geom
+    tmpl += '''
+charge=%d''' % charge
+    tmpl += '''
+{hf; maxit,1}
+{matrop,read,orb,type=orbitals,file=orb.matrop
+save,orb,2101.2}
+!{matrop,read,s0,type=den,file=ovlp.matrop
+!save,s0,}
+hamiltonian,'fcidump'
+{hf;start,2101.2}
+'''
+    tmpl += '''
+{ %s;''' % method
+    if do_rdm1:
+        tmpl += '''
+dm }
+{matrop
+load,den,den,2140.2
+write,den,rdm1,new
+}\n'''
+    else:
+        tmpl += '''}\n'''
+    return tmpl
+
 
 if __name__ == '__main__':
     import os, sys
@@ -141,7 +181,7 @@ if __name__ == '__main__':
     e, dm = call_molpro(emb, simple_inp('ccsd', nemb, emb.nelectron))
     print 'molpro-cc', e, dm # -4.28524318
     e, dm = call_molpro(emb, simple_inp('ccsd', nemb, emb.nelectron, do_rdm1=1))
-    print e, dm
+    print dm
     print '------------'
 
     import pydmet.impsolver
@@ -149,3 +189,4 @@ if __name__ == '__main__':
     solver = pydmet.impsolver.use_local_solver(pydmet.impsolver.ccsd)
     res = solver(mol, emb)
     print 'psi4-cc', res['etot']
+    print res['rdm1']

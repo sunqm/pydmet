@@ -218,3 +218,7 @@ def casscf(mol, emb, vfit=0):
            'e2frag': e2_ptrace*.5}
 
     return res
+
+
+def mrci(mol, emb, vfit=0):
+    pass

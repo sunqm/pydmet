@@ -243,12 +243,13 @@ class EmbSys(object):
             cimp = numpy.dot(emb.impbas_coeff[:,:nimp].T, sc[:,:nocc])
             emb._project_nelec_frag = numpy.linalg.norm(cimp)**2*2
 
-        if eff_scf._eri is not None:
-            t1 = time.clock()
-            embs_eri_ao2mo(embs, eff_scf._eri)
-            log.debug(self, 'CPU time for embsys eri AO->MO: %.8g sec', \
-                      time.clock()-t1)
-        else:
+#TODO:        if eff_scf._eri is not None:
+#TODO:            t1 = time.clock()
+#TODO:            embs_eri_ao2mo(embs, eff_scf._eri)
+#TODO:            log.debug(self, 'CPU time for embsys eri AO->MO: %.8g sec', \
+#TODO:                      time.clock()-t1)
+#TODO:        else:
+        if 1:
             for emb in self.embs:
                 emb._eri = emb.eri_on_impbas(mol)
 
@@ -849,21 +850,21 @@ def extract_partial_trace(emb, cires, with_env_pot=False):
     return e_frag, nelec_frag
 
 
-def embs_eri_ao2mo(embs, eri_ao):
-    import dmet_misc
-    c = []
-    offsets = [0]
-    off = 0
-    for emb in embs:
-        c.append(emb.impbas_coeff)
-        off += emb.impbas_coeff.shape[1]
-        offsets.append(off)
-    c = numpy.array(numpy.hstack(c), order='F')
-    offsets = numpy.array(offsets, dtype=numpy.int32)
-    v = dmet_misc.embs_eri_ao2mo_o3(eri_ao, c, offsets)
-    for n,emb in enumerate(embs):
-        emb._eri = v[n]
-    return embs
+#TODO:def embs_eri_ao2mo(embs, eri_ao):
+#TODO:    import dmet_misc
+#TODO:    c = []
+#TODO:    offsets = [0]
+#TODO:    off = 0
+#TODO:    for emb in embs:
+#TODO:        c.append(emb.impbas_coeff)
+#TODO:        off += emb.impbas_coeff.shape[1]
+#TODO:        offsets.append(off)
+#TODO:    c = numpy.array(numpy.hstack(c), order='F')
+#TODO:    offsets = numpy.array(offsets, dtype=numpy.int32)
+#TODO:    v = dmet_misc.embs_eri_ao2mo_o3(eri_ao, c, offsets)
+#TODO:    for n,emb in enumerate(embs):
+#TODO:        emb._eri = v[n]
+#TODO:    return embs
 
 
 
