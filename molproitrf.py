@@ -11,6 +11,7 @@ from pyscf import scf
 from pyscf import lib
 from pyscf import ao2mo
 from pyscf.future.tools import fcidump
+import impsolver
 
 
 #MOLPROEXE = os.environ['HOME'] + '/workspace/molpro-dev/bin/molpro'
@@ -20,9 +21,10 @@ MOLPROEXE = 'molpro'
 def part_eri_hermi(emb, eri):
     nimp = emb.imp_site.shape[0]
     mo = emb.mo_coeff_on_imp
+    nmo = mo.shape[1]
     prj = numpy.dot(mo[:nimp,:].T, mo[:ptrace,:])
 
-    eri1 = ao2mo.restore(4, eri)
+    eri1 = ao2mo.restore(4, eri, nmo)
     for i in range(eri1.shape[0]):
         tmp = numpy.dot(prj, lib.unpack_tril(eri1[i]))
         eri1[i] = lib.pack_tril(tmp+tmp.T)

@@ -195,7 +195,7 @@ class RHF(scf.hf.RHF):
         self.imp_basidx = []
 
         if orth_ao is None:
-            self.pre_orth_ao = numpy.eye(mol.nao_nr())
+            self.pre_orth_ao = numpy.eye(self.mol.nao_nr())
             #self.pre_orth_ao = lo.iao.pre_atm_scf_ao(mol)
             #self.pre_orth_ao = lo.iao.preiao(mol)
             self.orth_ao_method = 'lowdin'
@@ -260,13 +260,11 @@ class RHF(scf.hf.RHF):
                 self.decompose_orbital(mo_orth)
         self.impbas_coeff = self.cons_impurity_basis()
         self.nelectron = mol.nelectron - self.env_orb.shape[1] * 2
-        log.info(self, 'number of electrons for impurity  = %d', \
-                 self.nelectron)
+        log.info(self, 'nelec of emb = %d', self.nelectron)
 
         self._eri = self.eri_on_impbas(mol)
 
-        self.energy_by_env, self._vhf_env = \
-                self.init_vhf_env(self.env_orb)
+        self.energy_by_env, self._vhf_env = self.init_vhf_env(self.env_orb)
 
     def init_vhf_env(self, env_orb):
         log.debug(self, 'init Hartree-Fock environment')
@@ -565,11 +563,10 @@ class UHF(RHF, scf.hf.UHF):
         self.nelectron_beta = mol.nelectron \
                 - self.entire_scf.nelectron_alpha \
                 - self.env_orb[1].shape[1]
-        log.info(self, 'alpha / beta electrons for impurity = %d / %d', \
+        log.info(self, 'alpha / beta electrons = %d / %d', \
                  self.nelectron_alpha, self.nelectron_beta)
 
-        self.energy_by_env, self._vhf_env \
-                = self.init_vhf_env(self.env_orb)
+        self.energy_by_env, self._vhf_env = self.init_vhf_env(self.env_orb)
 
     def init_vhf_env(self, env_orb):
         log.debug(self, 'init Hartree-Fock environment')

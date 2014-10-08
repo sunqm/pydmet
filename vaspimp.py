@@ -71,7 +71,7 @@ class OneImpNI(OneImpNaiveNI):
         dmimp = effscf.calc_den_mat(mo_coeff=cs.T)
         dm = numpy.zeros_like(fock)
         dm[:nimp,:nimp] = dmimp[:nimp,:nimp]
-        h1e = fock - self.get_veff(mol, dm)
+        h1e = fock - self.get_veff(self.mol, dm)
         return h1e
 
 
@@ -82,6 +82,7 @@ class OneImpOnCLUSTDUMP(OneImp):
         self._vasphf = vasphf
         dmet_hf.RHF.__init__(self, entire_scf, numpy.eye(vasphf['NORB']))
         self.bas_on_frag = self._vasphf['ORBIND']
+        assert(self._vasphf['NIMP'] == len(self.bas_on_frag))
         self._eri = vasphf['ERI']
 
     def build_(self, mol=None):
@@ -95,6 +96,7 @@ class OneImpOnCLUSTDUMP(OneImp):
                                           gen_imp_site=True)
         #self.impbas_coeff = self.cons_impurity_basis()
         self.impbas_coeff = self._vasphf['EMBASIS']
+        assert(abs(self.impbas_coeff).sum() > 1e-10)
         #print abs(abs(self.cons_impurity_basis()) - abs(self._vasphf['EMBASIS'])).sum()
         #assert(0)
         #log.debug(self, 'diff of impbas_coeff to readin embasis %.8g',
@@ -106,8 +108,7 @@ class OneImpOnCLUSTDUMP(OneImp):
         self.energy_by_env, self._vhf_env = \
                 self.init_vhf_env(self.env_orb)
 
-    def init_vhf_env(self, mol, env_orb):
-        self.energy_by_env = 0
+    def init_vhf_env(self, env_orb):
         nemb = self._vasphf['NEMB']
         c = numpy.dot(self.impbas_coeff.T, self._vasphf['MO_COEFF'])
 #        vhf = numpy.dot(c*self._vasphf['MO_ENERGY'], c.T) \
@@ -116,8 +117,8 @@ class OneImpOnCLUSTDUMP(OneImp):
 
         mocc = c[:,:self._vasphf['NELEC']/2]
         dmemb = numpy.dot(mocc, mocc.T)*2
-        vemb = self.get_veff(mol, dmemb)
-        return vhf - vemb
+        vemb = self.get_veff(self.mol, dmemb)
+        return 0, vhf - vemb
 
     def init_guess_method(self, mol):
         log.debug(self, 'init guess based on entire MO coefficients')
@@ -142,8 +143,8 @@ class OneImpOnCLUSTDUMP(OneImp):
         self.build_(self.mol)
         self.scf_conv, self.hf_energy, self.mo_energy, self.mo_occ, \
                 self.mo_coeff_on_imp \
-                = self.scf_cycle(self.mol, self.conv_threshold, \
-                                 dump_chk=False)
+                = scf.hf.scf_cycle(self.mol, self, self.conv_threshold, \
+                                   dump_chk=False)
         self.mo_coeff = numpy.dot(self.impbas_coeff, self.mo_coeff_on_imp)
         if self.scf_conv:
             log.log(self, 'converged impurity sys electronic energy = %.15g', \
@@ -155,12 +156,9 @@ class OneImpOnCLUSTDUMP(OneImp):
 
         dm = self.calc_den_mat(self.mo_coeff_on_imp, self.mo_occ)
         vhf = self.get_veff(self.mol, dm)
-        self.e_frag, self.n_elec_frag = \
+        self.hf_energy, self.e_frag, self.n_elec_frag = \
                 self.calc_frag_elec_energy(self.mol, vhf, dm)
         return self.hf_energy
-
-    def dim_of_impurity(self):
-        return self._vasphf['NIMP']
 
 def read_clustdump(fcidump, jdump, kdump, fockdump):
     dic = {}
@@ -275,7 +273,7 @@ def read_clustdump(fcidump, jdump, kdump, fockdump):
     dic['FOCK'] = reduce(numpy.dot, (mo_coeff, fock, mo_coeff.T))
     dic['J'] = reduce(numpy.dot, (mo_coeff, vj, mo_coeff.T))
     dic['K'] = reduce(numpy.dot, (mo_coeff, vk, mo_coeff.T))
-    dic['EMBASIS'] = numpy.dot(mo_coeff,embasis)
+    dic['EMBASIS'] = numpy.dot(mo_coeff, embasis)
     dic['H1EMB'] = h1emb
     dic['ERI'] = eri
     return dic

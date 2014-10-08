@@ -58,7 +58,7 @@ class RHF(scf.hf.RHF):
         return mo_occ
 
     def scf(self):
-        self.dump_scf_option()
+        self.dump_flags()
 
         self.scf_conv, self.hf_energy, \
                 self.mo_energy, self.mo_occ, self.mo_coeff \
@@ -308,7 +308,6 @@ def read_jkdump(fcidump):
     return dic
 
 if __name__ == '__main__':
-    import pickle
     mol = gto.Mole()
     mol.verbose = 5
     mol.output = 'out_hf'

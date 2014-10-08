@@ -8,21 +8,54 @@ import numpy
 from pyscf import gto
 from pyscf import scf
 from pyscf import lib
-from pyscf.lib import _vhf
-from pyscf.lib import _ao2mo
 from pyscf import ao2mo
 from pyscf.future import mcscf
-from pyscf.future import fci
-import psi4
+import pyscf.future.fci.direct_spin0 as fci_direct
+from pyscf.future import tools
+import pyscf.future.tools.fcidump
 
-FCIEXE = os.path.dirname(__file__) + '/fci'
+class ImpSolver(object):
+    def __init__(self, solver):
+        self.solver = solver
 
-def _scf_energy(h1e, h2e, mo, nocc):
+        self.escf = None
+        self.etot = None
+        self.e2frag = None
+        self.dm1 = None
+
+    # when with_e2frag = nimp, self.e2frag is the partially traced energy
+    def run(self, emb, eri, vfit=0, with_1pdm=False, with_e2frag=None):
+        h1e = emb.get_hcore()
+        if isinstance(vfit, numpy.ndarray):
+            nv = vfit.shape[0]
+            h1e[:nv,:nv] += vfit
+        nelec = emb.nelectron
+        mo = emb.mo_coeff_on_imp
+        self.escf, self.etot, self.e2frag, self.dm1 = \
+                self.solver(emb.mol, nelec, h1e, eri, mo, \
+                            with_1pdm, with_e2frag)
+        return self.etot, self.e2frag, self.dm1
+
+class Psi4CCSD(ImpSolver):
+    def __init__(self):
+        ImpSolver.__init__(self, psi4ccsd)
+
+class Psi4CCSD_T(ImpSolver):
+    def __init__(self):
+        ImpSolver.__init__(self, psi4ccsd_t)
+
+class FCI(ImpSolver):
+    def __init__(self):
+        ImpSolver.__init__(self, fci)
+
+
+def simple_hf(h1e, eri, mo, nelec):
     mol = gto.Mole()
     mol.verbose = 0
     mol.output = '/dev/null'
     mol.build(False, False)
     mf = scf.RHF(mol)
+    nocc = nelec / 2
     mf.init_guess_method = \
             lambda mol: (0, numpy.dot(mo[:,:nocc],mo[:,:nocc].T)*2)
     mf.get_hcore = lambda mol: h1e
@@ -32,193 +65,119 @@ def _scf_energy(h1e, h2e, mo, nocc):
         mo_occ[:nocc] = 2
         return mo_occ
     mf.set_mo_occ = _set_mo_occ
-    def _get_veff(mol, dm, dm_last=0, vhf_last=0):
-        vj, vk = _vhf.vhf_jk_incore_o2(h2e, dm)
-        return vj - vk * .5
-    mf.get_veff = _get_veff
+    mf._eri = eri
 
     scf_conv, hf_energy, mo_energy, mo_occ, mo_coeff \
-            = mf.scf_cycle(mol, 1e-9)
+            = mf.scf_cycle(mol, 1e-9, dump_chk=False)
     return hf_energy, mo_energy, mo_occ, mo_coeff
 
-def cc(mol, nelec, h1e, h2e, ptrace, mo, ccname='CCSD'):
-    hf_energy, mo_energy, mo_occ, mo = \
-            _scf_energy(h1e, h2e, mo, nelec/2)
-    h1e = reduce(numpy.dot, (mo.T, h1e, mo))
-    eri = _ao2mo.partial_eri_o2(h2e, mo)
-    #eri1 = numpy.empty(h2e.size)
-    #ij = 0
-    #for i in range(h2e.shape[0]):
-    #    for j in range(i+1):
-    #        eri1[ij] = h2e[i,j]
-    #        ij += 1
-    #eri = ao2mo.incore.full(eri1, mo)
 
+def _psi4cc(mol, nelec, h1e, eri, mo, with_1pdm, with_e2frag, ccname='CCSD'):
+    import psi4
+    eri = ao2mo.restore(8, eri, mo.shape[1])
+    hf_energy, mo_energy, mo_occ, mo = simple_hf(h1e, eri, mo, nelec)
+
+    h1e = reduce(numpy.dot, (mo.T, h1e, mo))
+    eri = ao2mo.incore.full(eri, mo)
+
+    rdm1 = None
     ps = psi4.Solver(max_memory=1<<34)
     with psi4.capture_stdout():
         nmo = h1e.shape[0]
         ps.prepare('RHF', numpy.eye(nmo), h1e, eri, nelec)
         ecc = ps.energy(ccname)
-        rdm1, rdm2 = ps.density()
-        rdm1 *= 2 # Psi4 gives rdm1 of alpha spin
+        if with_1pdm or with_e2frag:
+            rdm1, rdm2 = ps.density()
+            rdm1 *= 2 # Psi4 gives rdm1 of alpha spin
 
 # note the rdm1,rdm2 from psi4 solver EXCLUDES HF contributions
-    for i in range(nelec/2):
-        rdm1[i,i] += 2
-        for j in range(nelec/2):
-            rdm2[i,j,i,j] += 4
-            rdm2[i,j,j,i] +=-2
+            for i in range(nelec/2):
+                rdm1[i,i] += 2
+                for j in range(nelec/2):
+                    rdm2[i,j,i,j] += 4
+                    rdm2[i,j,j,i] +=-2
+            rdm1 = reduce(numpy.dot, (mo, rdm1, mo.T))
 
-    nmo = mo.shape[1]
-    p = numpy.dot(mo[:ptrace,:].T, mo[:ptrace,:])
-    frag_rdm1 = numpy.dot(p, rdm1)
-    e1_ptrace = numpy.dot(frag_rdm1.reshape(-1), h1e.reshape(-1))
+    e2frag = 0
+    if with_e2frag:
+        nmo = mo.shape[1]
+        nimp = with_e2frag
+        p = numpy.dot(mo[:nimp,:].T, mo[:nimp,:])
+        # psi4 store DM in the order of p^+ q^+ r s
+        eri1 = ao2mo.restore(1, eri, nmo).transpose(0,2,1,3)
+        frag_rdm2 = numpy.dot(p, rdm2.reshape(nmo,-1))
+        e2frag = .5*numpy.dot(frag_rdm2.reshape(-1), eri1.reshape(-1))
+    return hf_energy, ecc+hf_energy, e2frag, rdm1
 
-    eri_full = ao2mo.restore(1, eri, nmo).transpose(0,2,1,3)
-    #eri_full = numpy.empty((nmo,nmo,nmo,nmo))
-    #ij = 0
-    #for i in range(nmo):
-    #    for j in range(i+1):
-    #        kl = 0
-    #        for k in range(nmo):
-    #            for l in range(k+1):
-    #                eri_full[i,k,j,l] = \
-    #                eri_full[j,k,i,l] = \
-    #                eri_full[i,l,j,k] = \
-    #                eri_full[j,l,i,k] = eri[ij,kl]
-    #                kl += 1
-    #        ij += 1
-    frag_rdm2 = numpy.dot(p, rdm2.reshape(nmo,-1))
-    e2_ptrace = numpy.dot(frag_rdm2.reshape(-1), eri_full.reshape(-1))
-    e_ptrace = e1_ptrace + e2_ptrace * .5
+def psi4ccsd(mol, nelec, h1e, eri, mo, with_1pdm, with_e2frag):
+    return _psi4cc(mol, nelec, h1e, eri, mo, with_1pdm, with_e2frag, 'CCSD')
 
-    #print ecc, hf_energy
-    res = {'rdm1': reduce(numpy.dot, (mo, rdm1, mo.T)),
-           #'escf': hf_energy,
-           'etot': ecc+hf_energy,
-           'e1frag': e1_ptrace,
-           'e2frag': e2_ptrace*.5}
-
-    return res
-
-def ccsd(mol, nelec, h1e, h2e, ptrace, mo):
-    return cc(mol, nelec, h1e, h2e, ptrace, mo, 'CCSD')
-
-def ccsd_t(mol, nelec, h1e, h2e, ptrace, mo):
-    return cc(mol, nelec, h1e, h2e, ptrace, mo, 'CCSD(T)')
-
-def _fcidump(fout, nelec, hcore, eri):
-    nmo = hcore.shape[0]
-    fout.write(' &FCI NORB= %3d,NELEC=%2d,MS2= 0,\n' % (nmo, nelec))
-    fout.write('  ORBSYM=%s\n' % ('1,' * nmo))
-    fout.write('  ISYM=1,\n')
-    fout.write(' &END\n')
-
-    ij = 0
-    for i in range(nmo):
-        for j in range(0, i+1):
-            kl = 0
-            for k in range(0, i+1):
-                for l in range(0, k+1):
-                    if ij >= kl:
-                        fout.write(' %.16g%3d%3d%3d%3d\n' \
-                                   % (eri[ij,kl], i+1, j+1, k+1, l+1))
-                    kl += 1
-            ij += 1
-
-    for i in range(nmo):
-        for j in range(0, i+1):
-            fout.write(' %.16g%3d%3d  0  0\n' % (hcore[i,j], i+1, j+1))
-
-def fci(mol, nelec, h1e, h2e, ptrace, mo):
-    tmpfile = tempfile.mkstemp()[1]
-    with open(tmpfile, 'w') as fout:
-        _fcidump(fout, nelec, h1e, h2e)
-        fout.write(' 0.0  0  0  0  0\n')
-
-    cmd = [FCIEXE,
-           '--subspace-dimension=16',
-           '--basis=Input',
-           '--ptrace=%i' % ptrace]
-    filedm1 = tempfile.mkstemp()[1]
-    cmd.append('--save-rdm1=%s' % filedm1)
-    #if rdm2 is not None:
-    #    filedm2 = tempfile.mkstemp()[1]
-    #    cmd.append('--save-rdm2=%s' % filedm2)
-    cmd.append(tmpfile)
-
-    rec = commands.getoutput(' '.join(cmd))
-    rdm1 = []
-    with open(filedm1, 'r') as fin:
-        n = int(fin.readline().split()[-1])
-        for d in fin.readlines():
-            rdm1.append(map(float, d.split()))
-    rdm1 = numpy.array(rdm1).reshape(n,n)
-    e1_ptrace = numpy.dot(rdm1[:ptrace].flatten(), h1e[:ptrace].flatten())
-    e2_ptrace = find_fci_key(rec, '!FCI STATE 1 pTraceSys')
-    e_ptrace = e1_ptrace + e2_ptrace
-
-    os.remove(filedm1)
-    os.remove(tmpfile)
-    res = {'rdm1': rdm1, \
-           'etot': find_fci_key(rec, '!FCI STATE 1 ENERGY'), \
-           'e1frag': e1_ptrace, \
-           'e2frag': e2_ptrace,
-           'rec': rec}
-
-    return res
-
-def find_fci_key(rec, key):
-    for dl in rec.splitlines():
-        if key in dl:
-            val = float(dl.split()[-1])
-            break
-    return val
-
-def use_local_solver(local_solver, with_rdm1=None):
-    def imp_solver(mol, emb, vfit=0):
-        h1e = emb.get_hcore(mol)
-        if not (isinstance(vfit, int) and vfit is 0):
-            nv = vfit.shape[0]
-            h1e[:nv,:nv] += vfit
-        if emb._eri is None:
-            eri = emb.eri_on_impbas(mol)
-        else:
-            eri = emb._eri
-        nelec = emb.nelectron
-        nimp = len(emb.bas_on_frag)
-        res = local_solver(mol, nelec, h1e, eri, nimp, emb.mo_coeff_on_imp)
-        return res
-    return imp_solver
+def psi4ccsd_t(mol, nelec, h1e, eri, mo, with_1pdm, with_e2frag):
+    return _psi4cc(mol, nelec, h1e, eri, mo, with_1pdm, with_e2frag, 'CCSD(T)')
 
 
-#FIXME
-def casscf(mol, emb, vfit=0):
-    mc = mcscf.CASSCF(mol, emb, ncas, nelecas, ncore)
-    def get_hcore(*args):
-        h1e = emb.get_hcore(mol)
-        if not (isinstance(vfit, int) and vfit is 0):
-            nv = vfit.shape[0]
-            h1e[:nv,:nv] += vfit
-        return h1e
-    mc.get_hcore = get_hcore
-    e_tot, e_ci, ci0, mo = mc.mc1step(mo=emb.mo_coeff_on_imp)
-    import mcscf
-    dm1, dm2 = mcscf.addons.make_rdm12(mc, ci0, mo)
-    eri_full = ao2mo.restore(1, emb._eri, nmo)
-    e1_ptrace = numpy.dot(frag_rdm1.reshape(-1), h1e.reshape(-1))
 
-    frag_rdm2 = numpy.dot(p, rdm2.reshape(nmo,-1))
-    e2_ptrace = numpy.dot(frag_rdm2.reshape(-1), eri_full.reshape(-1))
-    e_ptrace = e1_ptrace + e2_ptrace * .5
-    res = {'rdm1': dm1,
-           #'escf': hf_energy,
-           'etot': e_tot,
-           'e1frag': e1_ptrace,
-           'e2frag': e2_ptrace*.5}
+#FCIEXE = os.path.dirname(__file__) + '/fci'
+#
+#def fci(mol, nelec, h1e, eri, mo, with_1pdm, with_e2frag):
+#    tmpfile = tempfile.NamedTemporaryFile()
+#    nmo = mo.shape[1]
+#    tools.fcidump.from_integrals(tmpfile.name, h1e, eri, nmo, nelec, 0)
+#
+#    cmd = [FCIEXE,
+#           '--subspace-dimension=16',
+#           '--basis=Input']
+#    if with_1pdm:
+#        filedm1 = tempfile.NamedTemporaryFile()
+#        cmd.append('--save-rdm1=%s' % filedm1.name)
+#    if with_e2frag:
+#        nimp = with_e2frag
+#        cmd.append('--ptrace=%i' % with_e2frag)
+#    cmd.append(tmpfile.name)
+#
+#    rec = commands.getoutput(' '.join(cmd))
+#
+#    rdm1 = []
+#    if with_1pdm:
+#        with open(filedm1.name, 'r') as fin:
+#            n = int(fin.readline().split()[-1])
+#            for d in fin.readlines():
+#                rdm1.append(map(float, d.split()))
+#        rdm1 = numpy.array(rdm1).reshape(n,n)
+#
+#    e2frag = 0
+#    if with_e2frag:
+#        e2frag = find_fci_key(rec, '!FCI STATE 1 pTraceSys')
+#
+#    return 0, find_fci_key(rec, '!FCI STATE 1 ENERGY'), e2frag, rdm1
+#
+#def find_fci_key(rec, key):
+#    for dl in rec.splitlines():
+#        if key in dl:
+#            val = float(dl.split()[-1])
+#            break
+#    return val
 
-    return res
+def fci(mol, nelec, h1e, eri, mo, with_1pdm, with_e2frag):
+    norb = h1e.shape[1]
+    eci, c = fci_direct.kernel(h1e, eri, norb, nelec)
+    if with_1pdm:
+        dm1 = fci_direct.make_rdm1(c, norb, nelec)
+    else:
+        dm1 = None
+    if with_e2frag:
+        eri1 = part_eri_hermi(eri, norb, with_e2frag)
+        e2frag = fci_direct.energy(numpy.zeros_like(h1e), eri1, c, norb, nelec)
+    else:
+        e2frag = None
+    return 0, eci, e2frag, dm1
 
+def part_eri_hermi(eri, norb, nimp):
+    eri1 = ao2mo.restore(4, eri, norb)
+    for i in range(eri1.shape[0]):
+        tmp = lib.unpack_tril(eri1[i])
+        tmp[nimp:] = 0
+        eri1[i] = lib.pack_tril(tmp+tmp.T)
+    eri1 = lib.transpose_sum(eri1, inplace=True)
+    return ao2mo.restore(8, eri1, norb) * .25
 
-def mrci(mol, emb, vfit=0):
-    pass
