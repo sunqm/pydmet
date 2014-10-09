@@ -272,8 +272,8 @@ class RHF(scf.hf.RHF):
         dm_env = numpy.dot(env_orb, env_orb.T.conj()) * 2
         vhf_env_ao = self.entire_scf.get_veff(self.mol, dm_env)
         hcore = self.entire_scf.get_hcore(self.mol)
-        energy_by_env = lib.trace_ab(dm_env, hcore) \
-                      + lib.trace_ab(dm_env, vhf_env_ao) * .5
+        energy_by_env = numpy.dot(dm_env.flatten(), hcore.flatten()) \
+                      + numpy.dot(dm_env.flatten(), vhf_env_ao.flatten()) * .5
         return energy_by_env, self.mat_ao2impbas(vhf_env_ao)
 
     def init_guess_method(self, mol):

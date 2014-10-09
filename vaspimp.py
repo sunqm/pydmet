@@ -5,7 +5,6 @@ import numpy
 from pyscf import lib
 import pyscf.lib.logger as log
 import pyscf.lib.parameters as param
-from pyscf.lib import _vhf
 from pyscf import ao2mo
 from pyscf import gto
 from pyscf import scf

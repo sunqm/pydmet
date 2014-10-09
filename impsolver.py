@@ -9,10 +9,10 @@ from pyscf import gto
 from pyscf import scf
 from pyscf import lib
 from pyscf import ao2mo
+from pyscf import tools
 from pyscf.future import mcscf
 import pyscf.future.fci.direct_spin0 as fci_direct
-from pyscf.future import tools
-import pyscf.future.tools.fcidump
+import pyscf.tools.fcidump
 
 class ImpSolver(object):
     def __init__(self, solver):
@@ -32,7 +32,7 @@ class ImpSolver(object):
         nelec = emb.nelectron
         mo = emb.mo_coeff_on_imp
         self.escf, self.etot, self.e2frag, self.dm1 = \
-                self.solver(emb.mol, nelec, h1e, eri, mo, \
+                self.solver(emb.mol, h1e, eri, mo, nelec, \
                             with_1pdm, with_e2frag)
         return self.etot, self.e2frag, self.dm1
 
@@ -72,7 +72,7 @@ def simple_hf(h1e, eri, mo, nelec):
     return hf_energy, mo_energy, mo_occ, mo_coeff
 
 
-def _psi4cc(mol, nelec, h1e, eri, mo, with_1pdm, with_e2frag, ccname='CCSD'):
+def _psi4cc(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag, ccname='CCSD'):
     import psi4
     eri = ao2mo.restore(8, eri, mo.shape[1])
     hf_energy, mo_energy, mo_occ, mo = simple_hf(h1e, eri, mo, nelec)
@@ -109,17 +109,17 @@ def _psi4cc(mol, nelec, h1e, eri, mo, with_1pdm, with_e2frag, ccname='CCSD'):
         e2frag = .5*numpy.dot(frag_rdm2.reshape(-1), eri1.reshape(-1))
     return hf_energy, ecc+hf_energy, e2frag, rdm1
 
-def psi4ccsd(mol, nelec, h1e, eri, mo, with_1pdm, with_e2frag):
-    return _psi4cc(mol, nelec, h1e, eri, mo, with_1pdm, with_e2frag, 'CCSD')
+def psi4ccsd(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
+    return _psi4cc(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag, 'CCSD')
 
-def psi4ccsd_t(mol, nelec, h1e, eri, mo, with_1pdm, with_e2frag):
-    return _psi4cc(mol, nelec, h1e, eri, mo, with_1pdm, with_e2frag, 'CCSD(T)')
+def psi4ccsd_t(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
+    return _psi4cc(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag, 'CCSD(T)')
 
 
 
 #FCIEXE = os.path.dirname(__file__) + '/fci'
 #
-#def fci(mol, nelec, h1e, eri, mo, with_1pdm, with_e2frag):
+#def fci(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
 #    tmpfile = tempfile.NamedTemporaryFile()
 #    nmo = mo.shape[1]
 #    tools.fcidump.from_integrals(tmpfile.name, h1e, eri, nmo, nelec, 0)
@@ -158,7 +158,7 @@ def psi4ccsd_t(mol, nelec, h1e, eri, mo, with_1pdm, with_e2frag):
 #            break
 #    return val
 
-def fci(mol, nelec, h1e, eri, mo, with_1pdm, with_e2frag):
+def fci(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
     norb = h1e.shape[1]
     eci, c = fci_direct.kernel(h1e, eri, norb, nelec)
     if with_1pdm:

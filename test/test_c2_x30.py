@@ -42,7 +42,7 @@ embsys = dmet_nonsc.EmbSys(mol, mf, [[0,1]])
 embsys.verbose = 5
 lib.logger.debug(embsys, '@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@')
 lib.logger.debug(embsys, 'embedding HF without chemical potential')
-embsys.frag_fci_solver = impsolver.use_local_solver(impsolver.cc)
+embsys.solver = impsolver.Psi4CCSD()
 embsys.fitmethod_1shot = dmet_nonsc.fit_imp_fix_nelec
 print embsys.one_shot()
 

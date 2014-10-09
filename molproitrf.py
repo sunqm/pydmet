@@ -4,13 +4,14 @@ import os
 import shutil
 import tempfile
 import commands
+import re
 import numpy
 
 from pyscf import gto
 from pyscf import scf
 from pyscf import lib
 from pyscf import ao2mo
-from pyscf.future.tools import fcidump
+from pyscf.tools import fcidump
 import impsolver
 
 
@@ -18,25 +19,7 @@ import impsolver
 MOLPROEXE = 'molpro'
 
 
-def part_eri_hermi(emb, eri):
-    nimp = emb.imp_site.shape[0]
-    mo = emb.mo_coeff_on_imp
-    nmo = mo.shape[1]
-    prj = numpy.dot(mo[:nimp,:].T, mo[:ptrace,:])
-
-    eri1 = ao2mo.restore(4, eri, nmo)
-    for i in range(eri1.shape[0]):
-        tmp = numpy.dot(prj, lib.unpack_tril(eri1[i]))
-        eri1[i] = lib.pack_tril(tmp+tmp.T)
-    eri1 = lib.transpose_sum(eri1, inplace=True)
-    return ao2mo.restore(8, eri1) * .25
-
-
-def simple_inp(method, nmo, nelec, do_rdm1=False):
-    hchain = ['he 0. 0. %8.4f'%i for i in range(nmo/2)]
-    geom = '\n'.join(hchain)
-    charge = nmo - nelec
-    tmpl = '''
+Tsimple = '''!leave this line blank
 memory,1000,m
 aoint,c_final=0
 symmetry,nosym
@@ -45,10 +28,8 @@ default=sto-3g,
 he=3-21g,
 h=sto-3g,
 }
-geometry={ %s }''' % geom
-    tmpl += '''
-charge=%d''' % charge
-    tmpl += '''
+geometry={@GEOM}
+charge=@CHARGE
 {hf; maxit,1}
 {matrop,read,orb,type=orbitals,file=orb.matrop
 save,orb,2101.2}
@@ -56,37 +37,79 @@ save,orb,2101.2}
 !save,s0,}
 hamiltonian,'fcidump'
 {hf;start,2101.2}
-'''
-    tmpl += '''
-{ %s;''' % method
-    if do_rdm1:
-        tmpl += '''
-dm,5000.2 }
+@METHOD
+dm,5000.2
 {matrop
 load,den,den,5000.2
 write,den,rdm1,new
-}\n'''
-    else:
-        tmpl += '''}\n'''
-    return tmpl
+}
+'''
+Tsimple_no1pdm = '''!leave this line blank
+memory,1000,m
+aoint,c_final=0
+symmetry,nosym
+basis={
+default=sto-3g,
+he=3-21g,
+h=sto-3g,
+}
+geometry={@GEOM}
+charge=@CHARGE
+{hf; maxit,1}
+{matrop,read,orb,type=orbitals,file=orb.matrop
+save,orb,2101.2}
+!{matrop,read,s0,type=den,file=ovlp.matrop
+!save,s0,}
+hamiltonian,'fcidump'
+{hf;start,2101.2}
+@METHOD
+'''
 
-def call_molpro(emb, inputstr):
+def simple_inp(method, nmo, nelec, with_1pdm=False):
+    if with_1pdm:
+        template = Tsimple
+    else:
+        template = Tsimple_no1pdm
+    hchain = ['he 0. 0. %8.4f'%i for i in range(nmo/2)]
+    geom = '\n'.join(hchain)
+    template = re.sub('@GEOM', geom, template)
+    template = re.sub('@CHARGE', str(nmo-nelec), template)
+    template = re.sub('@METHOD', method, template)
+    return template
+
+def casscf_inp(method, nmo, nelec, ncas, nelecas, with_1pdm=False):
+    ncore = (nelec - nelecas) / 2
+    nocc = ncore + ncas
+    method = '{multi;closed,%d;occ,%d}' % (ncore, nocc)
+    return simple_inp(method, nmo, nelec, ncas, nelec, with_1pdm)
+
+def mrci_inp(method, nmo, nelec, ncas, nelecas, with_1pdm=False):
+    ncore = (nelec - nelecas) / 2
+    nocc = ncore + ncas
+    method = '''{multi;closed,%d;occ,%d}
+mrci''' % (ncore, nocc)
+    return simple_inp(method, nmo, nelec, ncas, nelec, with_1pdm)
+
+def write_matrop(fname, mat):
+    mat = mat.reshape(-1)
+    with open(fname, 'w') as fin:
+        fin.write('BEGIN_DATA,\n')
+        for x in mat:
+            fin.write('%25.15f\n' % x)
+        fin.write('END_DATA,\n')
+
+def call_molpro(h1e, eri, mo, nelec, inputstr):
     tdir = tempfile.mkdtemp(prefix='tmolpro')
     inpfile = os.path.join(tdir, 'inputs')
 
-    nemb = emb.impbas_coeff.shape[1]
+    nmo = mo.shape[1]
     fcidump.from_integrals(os.path.join(tdir, 'fcidump'),
-                           emb.get_hcore(), emb._eri, nemb,
-                           emb.nelectron, 0)
-    orbmat = numpy.eye(nemb)
-    with open(os.path.join(tdir,'orb.matrop'),'w') as fin:
-        fin.write('BEGIN_DATA,\n')
-        for xs in orbmat:
-            fin.write('%s\n' % ','.join(map(str, xs)))
-        fin.write('END_DATA,\n')
+                           h1e, eri, nmo, nelec, 0)
+    write_matrop(os.path.join(tdir,'orb.matrop'), numpy.eye(nmo))
 
     open(inpfile, 'w').write(inputstr)
 
+# note fcidump and orb.matrop should be put in the runtime dir
     cmd = ' '.join(('cd', tdir, '&& TMPDIR=`pwd`', MOLPROEXE, inpfile))
     rec = commands.getoutput(cmd)
     if 'fehler' in rec:
@@ -102,50 +125,66 @@ def call_molpro(emb, inputstr):
             fin.readline()
             fin.readline()
             dat = fin.read().replace(',', ' ').split()
-        rdm1 = numpy.array(map(float, dat[:-1])).reshape(nemb,nemb)
+        rdm1 = numpy.array(map(float, dat[:-1])).reshape(nmo,nmo)
     else:
         rdm1 = None
     shutil.rmtree(tdir)
     return e, rdm1
 
-#FIXME
-def casscf_inp(method, nmo, nelec, do_rdm1=False):
-    hchain = ['he 0. 0. %8.4f'%i for i in range(nmo/2)]
-    geom = '\n'.join(hchain)
-    charge = nmo - nelec
-    tmpl = '''
-memory,1000,m
-aoint,c_final=0
-symmetry,nosym
-basis={
-default=sto-3g,
-he=3-21g,
-h=sto-3g,
-}
-geometry={ %s }''' % geom
-    tmpl += '''
-charge=%d''' % charge
-    tmpl += '''
-{hf; maxit,1}
-{matrop,read,orb,type=orbitals,file=orb.matrop
-save,orb,2101.2}
-!{matrop,read,s0,type=den,file=ovlp.matrop
-!save,s0,}
-hamiltonian,'fcidump'
-{hf;start,2101.2}
-'''
-    tmpl += '''
-{ %s;''' % method
-    if do_rdm1:
-        tmpl += '''
-dm }
-{matrop
-load,den,den,2140.2
-write,den,rdm1,new
-}\n'''
-    else:
-        tmpl += '''}\n'''
-    return tmpl
+
+#TODO:def part_eri_hermi(emb, eri):
+#TODO:    nimp = emb.imp_site.shape[0]
+#TODO:    mo = emb.mo_coeff_on_imp
+#TODO:    nmo = mo.shape[1]
+#TODO:    prj = numpy.dot(mo[:nimp,:].T, mo[:ptrace,:])
+#TODO:
+#TODO:    eri1 = ao2mo.restore(4, eri, nmo)
+#TODO:    for i in range(eri1.shape[0]):
+#TODO:        tmp = numpy.dot(prj, lib.unpack_tril(eri1[i]))
+#TODO:        eri1[i] = lib.pack_tril(tmp+tmp.T)
+#TODO:    eri1 = lib.transpose_sum(eri1, inplace=True)
+#TODO:    return ao2mo.restore(8, eri1) * .25
+
+
+def simple_call(method):
+    def f(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
+        input = simple_inp(method, mo.shape[1], nelec, with_1pdm)
+        e, rdm1 = call_molpro(h1e, eri, mo, nelec, input)
+        return e, None, rdm1
+    return f
+
+def mcscf_call(ncas, nelecas):
+    def f(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
+        input = casscf_inp(method, mo.shape[1], nelec,
+                           ncas, nelecas, with_1pdm)
+        e, rdm1 = call_molpro(h1e, eri, mo, nelec, input)
+        return e, None, rdm1
+    return f
+
+def mrci_call(ncas, nelecas):
+    def f(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
+        input = mrci_inp(method, mo.shape[1], nelec,
+                           ncas, nelecas, with_1pdm)
+        e, rdm1 = call_molpro(h1e, eri, mo, nelec, input)
+        return e, None, rdm1
+    return f
+
+class CCSD(impsolver.ImpSolver):
+    def __init__(self):
+        impsolver.ImpSolver.__init__(self, simple_call('ccsd'))
+
+class CCSD_T(impsolver.ImpSolver):
+    def __init__(self):
+        impsolver.ImpSolver.__init__(self, simple_call('ccsd(t)'))
+
+class CASSCF(impsolver.ImpSolver):
+    def __init__(self, ncas, nelecas):
+        impsolver.ImpSolver.__init__(self, mcscf_call(ncas, nelecas))
+
+class MRCI(impsolver.ImpSolver):
+    def __init__(self, ncas, nelecas):
+        impsolver.ImpSolver.__init__(self, mrci_call(ncas, nelecas))
+
 
 
 if __name__ == '__main__':
@@ -180,15 +219,18 @@ if __name__ == '__main__':
     print emb.hf_energy
 
     nemb = emb.impbas_coeff.shape[1]
-    e, dm = call_molpro(emb, simple_inp('ccsd', nemb, emb.nelectron))
+    mo = emb.mo_coeff_on_imp
+    e, dm = call_molpro(emb.get_hcore(), emb._eri, mo, emb.nelectron,
+                        simple_inp('ccsd', nemb, emb.nelectron))
     print 'molpro-cc', e, dm # -4.28524318
-    e, dm = call_molpro(emb, simple_inp('ccsd', nemb, emb.nelectron, do_rdm1=1))
+    e, dm = call_molpro(emb.get_hcore(), emb._eri, mo, emb.nelectron,
+                        simple_inp('ccsd', nemb, emb.nelectron, 1))
     print dm
     print '------------'
 
     import pydmet.impsolver
-    nimp = emb.num_of_impbas()
-    solver = pydmet.impsolver.use_local_solver(pydmet.impsolver.ccsd)
-    res = solver(mol, emb)
-    print 'psi4-cc', res['etot']
-    print res['rdm1']
+    nimp = len(emb.bas_on_frag)
+    solver = pydmet.impsolver.Psi4CCSD()
+    etot, efrag, rdm1 = solver.run(emb, emb._eri, with_1pdm=True)
+    print 'psi4-cc', etot
+    print rdm1
