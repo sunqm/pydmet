@@ -77,18 +77,39 @@ def simple_inp(method, nmo, nelec, with_1pdm=False):
     template = re.sub('@METHOD', method, template)
     return template
 
-def casscf_inp(method, nmo, nelec, ncas, nelecas, with_1pdm=False):
+def casscf_inp(method, nmo, nelec, ncas, nelecas, with_1pdm=False,
+               caslist=None):
     ncore = (nelec - nelecas) / 2
     nocc = ncore + ncas
-    method = '{multi;closed,%d;occ,%d}' % (ncore, nocc)
-    return simple_inp(method, nmo, nelec, ncas, nelec, with_1pdm)
+    if caslist:
+        assert(ncas == len(caslist))
+        lst0 = sorted(list(set(range(ncore+1,nocc+1)) - set(caslist)))
+        lst1 = sorted(list(set(caslist) - set(range(ncore+1,nocc+1))))
+        map = []
+        for i,k in enumerate(lst0):
+            map.append('rotate,%d.1,%d.1,0' % (k, lst1[i]))
+        method = '{multi;closed,%d;occ,%d\n%s}' % (ncore, nocc, '\n'.join(map))
+    else:
+        method = '{multi;closed,%d;occ,%d}' % (ncore, nocc)
+    return simple_inp(method, nmo, nelec, with_1pdm)
 
-def mrci_inp(method, nmo, nelec, ncas, nelecas, with_1pdm=False):
+def mrci_inp(method, nmo, nelec, ncas, nelecas, with_1pdm=False,
+             caslist=None):
     ncore = (nelec - nelecas) / 2
     nocc = ncore + ncas
-    method = '''{multi;closed,%d;occ,%d}
+    if caslist:
+        assert(ncas == len(caslist))
+        lst0 = sorted(list(set(range(ncore+1,nocc+1)) - set(caslist)))
+        lst1 = sorted(list(set(caslist) - set(range(ncore+1,nocc+1))))
+        map = []
+        for i,k in enumerate(lst0):
+            map.append('rotate,%d.1,%d.1,0' % (k, lst1[i]))
+        method = '''{multi;closed,%d;occ,%d\n%s}
+mrci''' % (ncore, nocc, '\n'.join(map))
+    else:
+        method = '''{multi;closed,%d;occ,%d}
 mrci''' % (ncore, nocc)
-    return simple_inp(method, nmo, nelec, ncas, nelec, with_1pdm)
+    return simple_inp(method, nmo, nelec, with_1pdm)
 
 def write_matrop(fname, mat):
     mat = mat.reshape(-1)
@@ -178,11 +199,11 @@ class CCSD_T(impsolver.ImpSolver):
         impsolver.ImpSolver.__init__(self, simple_call('ccsd(t)'))
 
 class CASSCF(impsolver.ImpSolver):
-    def __init__(self, ncas, nelecas):
+    def __init__(self, ncas, nelecas, caslist=None):
         impsolver.ImpSolver.__init__(self, mcscf_call(ncas, nelecas))
 
 class MRCI(impsolver.ImpSolver):
-    def __init__(self, ncas, nelecas):
+    def __init__(self, ncas, nelecas, caslist=None):
         impsolver.ImpSolver.__init__(self, mrci_call(ncas, nelecas))
 
 
