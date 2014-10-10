@@ -77,10 +77,7 @@ def simple_inp(method, nmo, nelec, with_1pdm=False):
     template = re.sub('@METHOD', method, template)
     return template
 
-def casscf_inp(method, nmo, nelec, ncas, nelecas, with_1pdm=False,
-               caslist=None):
-    ncore = (nelec - nelecas) / 2
-    nocc = ncore + ncas
+def _key_multi(ncore, nocc, caslist=None):
     if caslist:
         assert(ncas == len(caslist))
         lst0 = sorted(list(set(range(ncore+1,nocc+1)) - set(caslist)))
@@ -91,25 +88,15 @@ def casscf_inp(method, nmo, nelec, ncas, nelecas, with_1pdm=False,
         method = '{multi;closed,%d;occ,%d\n%s}' % (ncore, nocc, '\n'.join(map))
     else:
         method = '{multi;closed,%d;occ,%d}' % (ncore, nocc)
-    return simple_inp(method, nmo, nelec, with_1pdm)
+    return method
 
-def mrci_inp(method, nmo, nelec, ncas, nelecas, with_1pdm=False,
-             caslist=None):
+def mr_inp(method, nmo, nelec, ncas, nelecas, with_1pdm=False,
+           caslist=None):
     ncore = (nelec - nelecas) / 2
     nocc = ncore + ncas
-    if caslist:
-        assert(ncas == len(caslist))
-        lst0 = sorted(list(set(range(ncore+1,nocc+1)) - set(caslist)))
-        lst1 = sorted(list(set(caslist) - set(range(ncore+1,nocc+1))))
-        map = []
-        for i,k in enumerate(lst0):
-            map.append('rotate,%d.1,%d.1,0' % (k, lst1[i]))
-        method = '''{multi;closed,%d;occ,%d\n%s}
-mrci''' % (ncore, nocc, '\n'.join(map))
-    else:
-        method = '''{multi;closed,%d;occ,%d}
-mrci''' % (ncore, nocc)
+    method = '%s\n%s' % (_key_multi(ncore, nocc, caslist), method)
     return simple_inp(method, nmo, nelec, with_1pdm)
+
 
 def write_matrop(fname, mat):
     mat = mat.reshape(-1)
@@ -123,12 +110,11 @@ def call_molpro(h1e, eri, mo, nelec, inputstr):
     tdir = tempfile.mkdtemp(prefix='tmolpro')
     inpfile = os.path.join(tdir, 'inputs')
 
+    open(inpfile, 'w').write(inputstr)
+    write_matrop(os.path.join(tdir,'orb.matrop'), mo)
     nmo = mo.shape[1]
     fcidump.from_integrals(os.path.join(tdir, 'fcidump'),
                            h1e, eri, nmo, nelec, 0)
-    write_matrop(os.path.join(tdir,'orb.matrop'), numpy.eye(nmo))
-
-    open(inpfile, 'w').write(inputstr)
 
 # note fcidump and orb.matrop should be put in the runtime dir
     cmd = ' '.join(('cd', tdir, '&& TMPDIR=`pwd`', MOLPROEXE, inpfile))
@@ -139,7 +125,7 @@ def call_molpro(h1e, eri, mo, nelec, inputstr):
     with open(inpfile+'.out') as fin:
         dat = fin.readlines()
         es = dat[-3]
-    e = float(es.split()[0])
+    eci, escf = map(float, es.split())[:2]
 
     if os.path.isfile(os.path.join(tdir,'rdm1')):
         with open(os.path.join(tdir,'rdm1')) as fin:
@@ -147,10 +133,11 @@ def call_molpro(h1e, eri, mo, nelec, inputstr):
             fin.readline()
             dat = fin.read().replace(',', ' ').split()
         rdm1 = numpy.array(map(float, dat[:-1])).reshape(nmo,nmo)
+# molpro will transform rdm1 back to AO representation (consistent to fcidump)
     else:
         rdm1 = None
     shutil.rmtree(tdir)
-    return e, rdm1
+    return escf, eci, rdm1
 
 
 #TODO:def part_eri_hermi(emb, eri):
@@ -170,24 +157,24 @@ def call_molpro(h1e, eri, mo, nelec, inputstr):
 def simple_call(method):
     def f(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
         input = simple_inp(method, mo.shape[1], nelec, with_1pdm)
-        e, rdm1 = call_molpro(h1e, eri, mo, nelec, input)
-        return e, None, rdm1
+        escf, eci, rdm1 = call_molpro(h1e, eri, mo, nelec, input)
+        return escf, eci, None, rdm1
     return f
 
-def mcscf_call(ncas, nelecas):
+def mr_call(method, ncas, nelecas, caslist=None):
+    if method.upper() == 'CASSCF' or method.upper() == 'MCSCF':
+        key = ''
+    elif method.upper() == 'MRCI':
+        key = 'mrci'
+    elif method.upper() == 'CASPT2':
+        key = 'rs2c'
+    else:
+        raise ValueError('Unknown method %s' % method)
     def f(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
-        input = casscf_inp(method, mo.shape[1], nelec,
-                           ncas, nelecas, with_1pdm)
-        e, rdm1 = call_molpro(h1e, eri, mo, nelec, input)
-        return e, None, rdm1
-    return f
-
-def mrci_call(ncas, nelecas):
-    def f(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
-        input = mrci_inp(method, mo.shape[1], nelec,
-                           ncas, nelecas, with_1pdm)
-        e, rdm1 = call_molpro(h1e, eri, mo, nelec, input)
-        return e, None, rdm1
+        input = mr_inp(key, mo.shape[1], nelec,
+                       ncas, nelecas, with_1pdm, caslist)
+        escf, eci, rdm1 = call_molpro(h1e, eri, mo, nelec, input)
+        return escf, eci, None, rdm1
     return f
 
 class CCSD(impsolver.ImpSolver):
@@ -200,11 +187,11 @@ class CCSD_T(impsolver.ImpSolver):
 
 class CASSCF(impsolver.ImpSolver):
     def __init__(self, ncas, nelecas, caslist=None):
-        impsolver.ImpSolver.__init__(self, mcscf_call(ncas, nelecas))
+        impsolver.ImpSolver.__init__(self, mr_call('casscf', ncas, nelecas, caslist))
 
 class MRCI(impsolver.ImpSolver):
     def __init__(self, ncas, nelecas, caslist=None):
-        impsolver.ImpSolver.__init__(self, mrci_call(ncas, nelecas))
+        impsolver.ImpSolver.__init__(self, mr_call('mrci', ncas, nelecas, caslist))
 
 
 
@@ -241,11 +228,16 @@ if __name__ == '__main__':
 
     nemb = emb.impbas_coeff.shape[1]
     mo = emb.mo_coeff_on_imp
-    e, dm = call_molpro(emb.get_hcore(), emb._eri, mo, emb.nelectron,
-                        simple_inp('ccsd', nemb, emb.nelectron))
-    print 'molpro-cc', e, dm # -4.28524318
-    e, dm = call_molpro(emb.get_hcore(), emb._eri, mo, emb.nelectron,
-                        simple_inp('ccsd', nemb, emb.nelectron, 1))
+    e = call_molpro(emb.get_hcore(), emb._eri, mo, emb.nelectron,
+                    mr_inp('rs2c', nemb, emb.nelectron, 2, 2))[1]
+    print 'molpro-caspt2', e
+    solver = MRCI(2, 2)
+    e = solver.run(emb, emb._eri)[0]
+    print 'molpro-mrci', e
+    print '------------'
+    _,e,dm = call_molpro(emb.get_hcore(), emb._eri, mo, emb.nelectron,
+                         simple_inp('ccsd', nemb, emb.nelectron, 1))
+    print 'molpro-cc', e # -4.28524318
     print dm
     print '------------'
 

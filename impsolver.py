@@ -48,6 +48,14 @@ class FCI(ImpSolver):
     def __init__(self):
         ImpSolver.__init__(self, fci)
 
+class CASSCF(ImpSolver):
+    def __init__(self, ncas, nelecas, caslist=None):
+        ImpSolver.__init__(self, None)
+        def f(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
+            return casscf(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag,
+                          ncas, nelecas, caslist)
+        self.solver = f
+
 
 def simple_hf(h1e, eri, mo, nelec):
     mol = gto.Mole()
@@ -181,3 +189,24 @@ def part_eri_hermi(eri, norb, nimp):
     eri1 = lib.transpose_sum(eri1, inplace=True)
     return ao2mo.restore(8, eri1, norb) * .25
 
+def casscf(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag,
+           ncas, nelecas, caslist=None):
+    mf = scf.RHF(mol)
+    mf.get_hcore = lambda mol: h1e
+    mf._eri = eri
+    mc = mcscf.CASSCF(mol, mf, ncas, nelecas)
+    if caslist:
+        mo = mcscf.addons.sort_mo(mc, mo, caslist, 1)
+    etot,ecas,civec,mo = mc.mc1step(mo)
+    if with_1pdm:
+        dm1a, dm1b = mcscf.addons.make_rdm1s(mc, civec, mo)
+        dm1 = dm1a + dm1b
+    else:
+        dm1 = None
+    if with_e2frag:
+#TODO:        eri1 = part_eri_hermi(eri, norb, with_e2frag)
+#TODO:        e2frag = fci_direct.energy(numpy.zeros_like(h1e), eri1, c, norb, nelec)
+        e2frag = 0
+    else:
+        e2frag = 0
+    return 0, eci, e2frag, dm1
