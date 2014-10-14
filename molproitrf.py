@@ -13,6 +13,7 @@ from pyscf import lib
 from pyscf import ao2mo
 from pyscf.tools import fcidump
 import impsolver
+from impsolver import ImpSolver
 
 
 #MOLPROEXE = os.environ['HOME'] + '/workspace/molpro-dev/bin/molpro'
@@ -79,7 +80,7 @@ def simple_inp(method, nmo, nelec, with_1pdm=False):
 
 def _key_multi(ncore, nocc, caslist=None):
     if caslist:
-        assert(ncas == len(caslist))
+        assert(nocc-ncore == len(caslist))
         lst0 = sorted(list(set(range(ncore+1,nocc+1)) - set(caslist)))
         lst1 = sorted(list(set(caslist) - set(range(ncore+1,nocc+1))))
         map = []
@@ -106,7 +107,7 @@ def write_matrop(fname, mat):
             fin.write('%25.15f\n' % x)
         fin.write('END_DATA,\n')
 
-def call_molpro(h1e, eri, mo, nelec, inputstr):
+def call_molpro(h1e, eri, mo, nelec, inputstr, log=None):
     tdir = tempfile.mkdtemp(prefix='tmolpro')
     inpfile = os.path.join(tdir, 'inputs')
 
@@ -120,11 +121,16 @@ def call_molpro(h1e, eri, mo, nelec, inputstr):
     cmd = ' '.join(('cd', tdir, '&& TMPDIR=`pwd`', MOLPROEXE, inpfile))
     rec = commands.getoutput(cmd)
     if 'fehler' in rec:
+        print 'molpro tempfiles in', tdir
         raise RuntimeError('molpro fail as:\n' + rec)
 
     with open(inpfile+'.out') as fin:
-        dat = fin.readlines()
-        es = dat[-3]
+        dat = fin.read()
+        dat1 = dat.split('\n')
+        es = dat1[-4]
+        if log is not None:
+            log.debug1(dat)
+            log.debug('\n'.join(dat1[-5:-3]))
     eci, escf = map(float, es.split())[:2]
 
     if os.path.isfile(os.path.join(tdir,'rdm1')):
@@ -154,26 +160,20 @@ def call_molpro(h1e, eri, mo, nelec, inputstr):
 #TODO:    return ao2mo.restore(8, eri1) * .25
 
 
-def simple_call(method):
+def simple_call(method, verbose=0):
     def f(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
+        log = lib.logger.Logger(mol.stdout, verbose)
         input = simple_inp(method, mo.shape[1], nelec, with_1pdm)
-        escf, eci, rdm1 = call_molpro(h1e, eri, mo, nelec, input)
+        escf, eci, rdm1 = call_molpro(h1e, eri, mo, nelec, input, log=log)
         return escf, eci, None, rdm1
     return f
 
-def mr_call(method, ncas, nelecas, caslist=None):
-    if method.upper() == 'CASSCF' or method.upper() == 'MCSCF':
-        key = ''
-    elif method.upper() == 'MRCI':
-        key = 'mrci'
-    elif method.upper() == 'CASPT2':
-        key = 'rs2c'
-    else:
-        raise ValueError('Unknown method %s' % method)
+def mr_call(method, ncas, nelecas, caslist=None, verbose=0):
     def f(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
-        input = mr_inp(key, mo.shape[1], nelec,
+        log = lib.logger.Logger(mol.stdout, verbose)
+        input = mr_inp(method, mo.shape[1], nelec,
                        ncas, nelecas, with_1pdm, caslist)
-        escf, eci, rdm1 = call_molpro(h1e, eri, mo, nelec, input)
+        escf, eci, rdm1 = call_molpro(h1e, eri, mo, nelec, input, log=log)
         return escf, eci, None, rdm1
     return f
 
@@ -187,11 +187,16 @@ class CCSD_T(impsolver.ImpSolver):
 
 class CASSCF(impsolver.ImpSolver):
     def __init__(self, ncas, nelecas, caslist=None):
-        impsolver.ImpSolver.__init__(self, mr_call('casscf', ncas, nelecas, caslist))
+        impsolver.ImpSolver.__init__(self, mr_call('', ncas, nelecas, caslist))
 
 class MRCI(impsolver.ImpSolver):
     def __init__(self, ncas, nelecas, caslist=None):
         impsolver.ImpSolver.__init__(self, mr_call('mrci', ncas, nelecas, caslist))
+
+# rs2c cannot calculate density matrix
+class CASPT2(impsolver.ImpSolver):
+    def __init__(self, ncas, nelecas, caslist=None):
+        impsolver.ImpSolver.__init__(self, mr_call('rs2c', ncas, nelecas, caslist))
 
 
 
