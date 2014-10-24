@@ -35,7 +35,7 @@ class RHF(scf.hf.RHF):
             mo = self._fcidump['MO_COEFF']
             dm = numpy.dot(mo[:,:nocc],mo[:,:nocc].T) * 2
             return 0, dm
-        self.init_guess_method = _initguess
+        self.make_init_guess = _initguess
         self._eri = self._fcidump['ERI']
         self.eri_in_memory = True
 
@@ -45,7 +45,7 @@ class RHF(scf.hf.RHF):
     def get_ovlp(self, mol=None):
         return numpy.eye(self._fcidump['NORB'])
 
-    def set_mo_occ(self, mo_energy, mo_coeff=None):
+    def set_occ(self, mo_energy, mo_coeff=None):
         mo_occ = numpy.zeros_like(mo_energy)
         nocc = self._fcidump['NELEC'] / 2
         mo_occ[:nocc] = 2
@@ -76,7 +76,7 @@ class RHF4test(scf.hf.RHF):
             for i in range(self._fcidump['NELEC']/2):
                 dm[i,i] = 2
             return 0, dm
-        self.init_guess_method = _initguess
+        self.make_init_guess = _initguess
         self._eri = self._fcidump['ERI']
         self.eri_in_memory = True
 
@@ -86,7 +86,7 @@ class RHF4test(scf.hf.RHF):
     def get_ovlp(self, mol=None):
         return numpy.eye(self._fcidump['NORB'])
 
-    def set_mo_occ(self, mo_energy, mo_coeff=None):
+    def set_occ(self, mo_energy, mo_coeff=None):
         mo_occ = numpy.zeros_like(mo_energy)
         nocc = self._fcidump['NELEC'] / 2
         mo_occ[:nocc] = 2
@@ -318,11 +318,11 @@ if __name__ == '__main__':
 #    print energy
 #
 #    #print abs(mf._fcidump['HCORE'] - mf._fcidump['HCORE'].T).sum()
-#    dm = mf.calc_den_mat()
+#    dm = mf.make_rdm1()
 #    fcidump0 = read_fcidump('C_solid_2x2x2/test2/FCIDUMP')
 #    vj1, vk1 = scf.hf.dot_eri_dm(fcidump0['ERI'], dm)
 #    vj0, vk0 = scf.hf.dot_eri_dm(fcidump0['ERI'],
-#                               mf.init_guess_method(mol)[1])
+#                               mf.make_init_guess(mol)[1])
 #    print abs(vj0-vj1).sum()
 #    print abs(vk0-vk1).sum()
 #

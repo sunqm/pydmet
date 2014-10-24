@@ -64,15 +64,15 @@ def simple_hf(h1e, eri, mo, nelec):
     mol.build(False, False)
     mf = scf.RHF(mol)
     nocc = nelec / 2
-    mf.init_guess_method = \
+    mf.make_init_guess = \
             lambda mol: (0, numpy.dot(mo[:,:nocc],mo[:,:nocc].T)*2)
     mf.get_hcore = lambda mol: h1e
     mf.get_ovlp = lambda mol: numpy.eye(mo.shape[1])
-    def _set_mo_occ(mo_energy, mo_coeff=None):
+    def _set_occ(mo_energy, mo_coeff=None):
         mo_occ = numpy.zeros_like(mo_energy)
         mo_occ[:nocc] = 2
         return mo_occ
-    mf.set_mo_occ = _set_mo_occ
+    mf.set_occ = _set_occ
     mf._eri = eri
 
     scf_conv, hf_energy, mo_energy, mo_occ, mo_coeff \

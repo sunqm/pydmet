@@ -219,6 +219,7 @@ class RHF(scf.hf.RHF):
         self.diis_space = entire_scf.diis_space
         self.conv_threshold = entire_scf.conv_threshold
         self.max_cycle = entire_scf.max_cycle
+        self.init_guess = None
         self.direct_scf = entire_scf.direct_scf
         self.direct_scf_threshold = entire_scf.direct_scf_threshold
         self.level_shift_factor = 0
@@ -276,11 +277,11 @@ class RHF(scf.hf.RHF):
                       + numpy.dot(dm_env.flatten(), vhf_env_ao.flatten()) * .5
         return energy_by_env, self.mat_ao2impbas(vhf_env_ao)
 
-    def init_guess_method(self, mol):
+    def make_init_guess(self, mol):
         log.debug(self, 'init guess based on entire MO coefficients')
         s = self.entire_scf.get_ovlp(mol)
         eff_scf = self.entire_scf
-        entire_scf_dm = eff_scf.calc_den_mat(eff_scf.mo_coeff, eff_scf.mo_occ)
+        entire_scf_dm = eff_scf.make_rdm1(eff_scf.mo_coeff, eff_scf.mo_occ)
         env_orb = numpy.dot(self.orth_coeff, self.env_orb)
         dm_env = numpy.dot(env_orb, env_orb.T.conj()) * 2
         cs = numpy.dot(self.impbas_coeff.T.conj(), s)
@@ -312,7 +313,7 @@ class RHF(scf.hf.RHF):
         s1e = self.mat_ao2impbas(self.entire_scf.get_ovlp(mol))
         return s1e
 
-    def set_mo_occ(self, mo_energy, mo_coeff=None):
+    def set_occ(self, mo_energy, mo_coeff=None):
         mo_occ = numpy.zeros_like(mo_energy)
         nocc = self.nelectron / 2
         mo_occ[:nocc] = 2
@@ -324,7 +325,7 @@ class RHF(scf.hf.RHF):
         log.debug(self, '  mo_energy = %s', mo_energy)
         return mo_occ
 
-    def calc_den_mat(self, mo_coeff=None, mo_occ=None):
+    def make_rdm1(self, mo_coeff=None, mo_occ=None):
         if mo_coeff is None:
             mo_coeff = self.mo_coeff_on_imp
         if mo_occ is None:
@@ -401,7 +402,7 @@ class RHF(scf.hf.RHF):
         # mo_coeff based on AOs
         self.mo_coeff = numpy.dot(self.impbas_coeff, self.mo_coeff_on_imp)
 
-        dm = self.calc_den_mat(self.mo_coeff_on_imp, self.mo_occ)
+        dm = self.make_rdm1(self.mo_coeff_on_imp, self.mo_occ)
         vhf = self.get_veff(self.mol, dm)
         self.hf_energy, self.e_frag, self.nelec_frag = \
                 self.calc_frag_elec_energy(self.mol, vhf, dm)
@@ -417,7 +418,7 @@ class RHF(scf.hf.RHF):
         s1e = mol.intor_symmetric('cint1e_ovlp_sph')
         c_inv = numpy.dot(self.orth_coeff.T, s1e)
         c_frag = numpy.dot(c_inv, self.impbas_coeff)
-        dm = self.calc_den_mat(self.mo_coeff_on_imp, self.mo_occ)
+        dm = self.make_rdm1(self.mo_coeff_on_imp, self.mo_occ)
         nimp = len(self.bas_on_frag)
         dm[nimp:] = 0
         dm = reduce(numpy.dot, (c_frag, dm, c_frag.T.conj()))
@@ -620,11 +621,11 @@ class UHF(RHF, scf.hf.UHF):
                  delta_dm, dm_change*100)
         return dm_change < conv_threshold*1e2
 
-    def init_guess_method(self, mol):
+    def make_init_guess(self, mol):
         log.debug(self, 'init guess based on entire MO coefficients')
         s = self.entire_scf.get_ovlp(self.mol)
         eff_scf = self.entire_scf
-        entire_scf_dm = eff_scf.calc_den_mat(eff_scf.mo_coeff, eff_scf.mo_occ)
+        entire_scf_dm = eff_scf.make_rdm1(eff_scf.mo_coeff, eff_scf.mo_occ)
         env_a = numpy.dot(self.orth_coeff, self.env_orb[0])
         env_b = numpy.dot(self.orth_coeff, self.env_orb[1])
         dm_a = numpy.dot(env_a, env_a.T.conj())
@@ -664,7 +665,7 @@ class UHF(RHF, scf.hf.UHF):
         c_b, e_b, info = lapack.dsygv(fock[1], s[1])
         return (e_a,e_b), (c_a,c_b)
 
-    def set_mo_occ(self, mo_energy, mo_coeff=None):
+    def set_occ(self, mo_energy, mo_coeff=None):
         mo_occ = [numpy.zeros_like(mo_energy[0]), \
                   numpy.zeros_like(mo_energy[1])]
         mo_occ[0][:self.nelectron_alpha] = 1
@@ -686,7 +687,7 @@ class UHF(RHF, scf.hf.UHF):
         log.debug(self, '  mo_energy = %s', mo_energy[1])
         return mo_occ
 
-    def calc_den_mat(self, mo_coeff, mo_occ):
+    def make_rdm1(self, mo_coeff, mo_occ):
         mo_a = mo_coeff[0][:,mo_occ[0]>0]
         mo_b = mo_coeff[1][:,mo_occ[1]>0]
         dm_a = numpy.dot(mo_a, mo_a.T.conj())
@@ -757,7 +758,7 @@ class UHF(RHF, scf.hf.UHF):
             log.log(self, 'electronic energy = %.15g after %d cycles.', \
                     self.hf_energy, self.max_cycle)
 
-        dm = self.calc_den_mat(self.mo_coeff_on_imp, self.mo_occ)
+        dm = self.make_rdm1(self.mo_coeff_on_imp, self.mo_occ)
         vhf = self.get_veff(self.mol, dm)
         self.hf_energy, self.e_frag, self.nelec_frag = \
                 self.calc_frag_elec_energy(self.mol, vhf, dm)
@@ -797,7 +798,7 @@ class UHF(RHF, scf.hf.UHF):
         c_inv = numpy.dot(self.orth_coeff.T, s1e)
         c_frag_a = numpy.dot(c_inv, self.impbas_coeff[0])
         c_frag_b = numpy.dot(c_inv, self.impbas_coeff[1])
-        dm = self.calc_den_mat(self.mo_coeff_on_imp, self.mo_occ)
+        dm = self.make_rdm1(self.mo_coeff_on_imp, self.mo_occ)
         nimp = len(self.bas_on_frag)
         dm[0][nimp:] = 0
         dm[1][nimp:] = 0

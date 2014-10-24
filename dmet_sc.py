@@ -742,10 +742,10 @@ def run_hf_with_ext_pot_(mol, entire_scf, vext_on_ao, follow_state=False):
     # when previous SCF does not converge, the initial guess will be incorrect
     # and leads to incorrect MF ground state.
     # In this case, follow old scf as initial guess.
-    dm = entire_scf.calc_den_mat(entire_scf.mo_coeff, entire_scf.mo_occ)
-    def _init_guess_method(mol):
+    dm = entire_scf.make_rdm1(entire_scf.mo_coeff, entire_scf.mo_occ)
+    def _make_init_guess_method(mol):
         return entire_scf.hf_energy, dm
-    eff_scf.init_guess_method = _init_guess_method
+    eff_scf.make_init_guess = _init_guess
 
     def _get_hcore(mol):
         h = entire_scf.get_hcore(mol)
@@ -783,7 +783,7 @@ def run_hf_with_ext_pot_(mol, entire_scf, vext_on_ao, follow_state=False):
             eff_scf.mo_coeff = mo_coeff
             eff_scf.mo_occ[:] = mo_occ
             return mo_occ
-        eff_scf.set_mo_occ = _occ_follow_state
+        eff_scf.set_occ = _occ_follow_state
 
     log.debug(mol, 'SCF for entire molecule with fitting potential')
     eff_scf.scf_conv, eff_scf.hf_energy, eff_scf.mo_energy, \
@@ -792,7 +792,7 @@ def run_hf_with_ext_pot_(mol, entire_scf, vext_on_ao, follow_state=False):
 
     # must release the modified get_hcore to get pure hcore
     del(eff_scf.get_hcore)
-    del(eff_scf.init_guess_method)
+    del(eff_scf.make_init_guess)
     return eff_scf
 
 

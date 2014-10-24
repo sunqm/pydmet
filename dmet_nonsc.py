@@ -89,7 +89,7 @@ class EmbSys(dmet_sc.EmbSys):
         vhf = emb._project_fock - emb._pure_hcore
         e1 = numpy.dot(dm1[:nimp].reshape(-1),
                        (emb._pure_hcore + .5 * vhf)[:nimp].reshape(-1))
-        dmf = emb.calc_den_mat(emb.mo_coeff_on_imp, emb.mo_occ)
+        dmf = emb.make_rdm1(emb.mo_coeff_on_imp, emb.mo_occ)
         vhf = emb.get_veff(emb.mol, dmf)
         e2 = e2frag - .5*numpy.dot(dm1[:nimp].reshape(-1),
                                    vhf[:nimp].reshape(-1))

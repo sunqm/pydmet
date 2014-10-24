@@ -66,7 +66,7 @@ class EmbSys(dmet_sc.EmbSys):
                 eff_scf = self.entire_scf
                 sc = numpy.dot(eff_scf.get_ovlp(mol), self.orth_coeff)
                 mo = numpy.dot(sc.T,eff_scf.mo_coeff)
-                dm_ref = eff_scf.calc_den_mat(mo, eff_scf.mo_occ)
+                dm_ref = eff_scf.make_rdm1(mo, eff_scf.mo_occ)
             e_tot, nelec = self.off_frags_energy(mol, dm_ref)
 
         last_frag = -1

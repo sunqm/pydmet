@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import os
+import os, sys
 import shutil
 import tempfile
 import commands
@@ -121,7 +121,7 @@ def call_molpro(h1e, eri, mo, nelec, inputstr, log=None):
     cmd = ' '.join(('cd', tdir, '&& TMPDIR=`pwd`', MOLPROEXE, inpfile))
     rec = commands.getoutput(cmd)
     if 'fehler' in rec:
-        print 'molpro tempfiles in', tdir
+        sys.stderr.write('molpro tempfiles in %s\n'%tdir)
         raise RuntimeError('molpro fail as:\n' + rec)
 
     with open(inpfile+'.out') as fin:
@@ -185,6 +185,7 @@ class CCSD_T(impsolver.ImpSolver):
     def __init__(self):
         impsolver.ImpSolver.__init__(self, simple_call('ccsd(t)'))
 
+# caslist: 1-based index
 class CASSCF(impsolver.ImpSolver):
     def __init__(self, ncas, nelecas, caslist=None):
         impsolver.ImpSolver.__init__(self, mr_call('', ncas, nelecas, caslist))

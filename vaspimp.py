@@ -67,7 +67,7 @@ class OneImpNI(OneImpNaiveNI):
         effscf = self.entire_scf
         cs = numpy.linalg.solve(effscf.mo_coeff, self.impbas_coeff)
         fock = numpy.dot(cs.T*effscf.mo_energy, cs)
-        dmimp = effscf.calc_den_mat(mo_coeff=cs.T)
+        dmimp = effscf.make_rdm1(mo_coeff=cs.T)
         dm = numpy.zeros_like(fock)
         dm[:nimp,:nimp] = dmimp[:nimp,:nimp]
         h1e = fock - self.get_veff(self.mol, dm)
@@ -119,11 +119,11 @@ class OneImpOnCLUSTDUMP(OneImp):
         vemb = self.get_veff(self.mol, dmemb)
         return 0, vhf - vemb
 
-    def init_guess_method(self, mol):
+    def make_init_guess(self, mol):
         log.debug(self, 'init guess based on entire MO coefficients')
         eff_scf = self.entire_scf
         c = numpy.dot(self.impbas_coeff.T, eff_scf.mo_coeff)
-        dm = eff_scf.calc_den_mat(c, eff_scf.mo_occ)
+        dm = eff_scf.make_rdm1(c, eff_scf.mo_occ)
         hf_energy = 0
         return hf_energy, dm
 
@@ -153,7 +153,7 @@ class OneImpOnCLUSTDUMP(OneImp):
             log.log(self, 'electronic energy = %.15g after %d cycles.', \
                     self.hf_energy, self.max_cycle)
 
-        dm = self.calc_den_mat(self.mo_coeff_on_imp, self.mo_occ)
+        dm = self.make_rdm1(self.mo_coeff_on_imp, self.mo_occ)
         vhf = self.get_veff(self.mol, dm)
         self.hf_energy, self.e_frag, self.n_elec_frag = \
                 self.calc_frag_elec_energy(self.mol, vhf, dm)

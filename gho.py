@@ -27,11 +27,11 @@ class RHF(dmet_hf.RHF):
 ##################################################
 # scf for impurity
 
-    def init_guess_method(self, mol):
+    def make_init_guess(self, mol):
         log.debug(self, 'init guess based on entire MO coefficients')
         s = self.entire_scf.get_ovlp(mol)
         eff_scf = self.entire_scf
-        entire_scf_dm = eff_scf.calc_den_mat(eff_scf.mo_coeff, eff_scf.mo_occ)
+        entire_scf_dm = eff_scf.make_rdm1(eff_scf.mo_coeff, eff_scf.mo_occ)
         env_orb = numpy.dot(self.orth_coeff, self.env_orb)
         dm_env = numpy.dot(env_orb, env_orb.T.conj()) * 2
         cs = numpy.dot(self.impbas_coeff.T.conj(), s)
@@ -65,7 +65,7 @@ class RHF(dmet_hf.RHF):
         s1e = self.mat_ao2impbas(self.entire_scf.get_ovlp(mol))
         return s1e
 
-    def set_mo_occ(self, mo_energy, mo_coeff=None):
+    def set_occ(self, mo_energy, mo_coeff=None):
         mo_occ = numpy.zeros_like(mo_energy)
         nocc = self.nelectron / 2
         mo_occ[:nocc] = 2
@@ -77,7 +77,7 @@ class RHF(dmet_hf.RHF):
         log.debug(self, '  mo_energy = %s', mo_energy)
         return mo_occ
 
-    def calc_den_mat(self, mo_coeff=None, mo_occ=None):
+    def make_rdm1(self, mo_coeff=None, mo_occ=None):
         if mo_coeff is None:
             mo_coeff = self.mo_coeff_on_imp
         if mo_occ is None:
@@ -206,7 +206,7 @@ environment two-electron part'''
         # ovlp**2 because of the beta orbital contribution
         log.info(self, 'overlap of determinants after SCF = %.15g', (ovlp**2))
 
-        dm = self.calc_den_mat(self.mo_coeff_on_imp, self.mo_occ)
+        dm = self.make_rdm1(self.mo_coeff_on_imp, self.mo_occ)
         vhf = self.get_veff(self.mol, dm)
         self.e_frag, self.n_elec_frag = \
                 self.calc_frag_elec_energy(self.mol, vhf, dm)
@@ -249,7 +249,7 @@ environment two-electron part'''
         c_inv = numpy.dot(self.orth_coeff.T, s)
         eff_scf = self.entire_scf
         mo = numpy.dot(c_inv, eff_scf.mo_coeff)
-        dm0 = eff_scf.calc_den_mat(mo, eff_scf.mo_occ)
+        dm0 = eff_scf.make_rdm1(mo, eff_scf.mo_occ)
         # in case impurity sites are not the AO orbitals
         mo = reduce(numpy.dot, (c_inv, self.impbas_coeff, self.mo_coeff_on_imp))
         dm1 = numpy.dot(mo*self.mo_occ, mo.T)
@@ -441,11 +441,11 @@ class UHF(dmet_hf.UHF):
                  delta_dm, dm_change*100)
         return dm_change < conv_threshold*1e2
 
-    def init_guess_method(self, mol):
+    def make_init_guess(self, mol):
         log.debug(self, 'init guess based on entire MO coefficients')
         s = self.entire_scf.get_ovlp(self.mol)
         eff_scf = self.entire_scf
-        entire_scf_dm = eff_scf.calc_den_mat(eff_scf.mo_coeff, eff_scf.mo_occ)
+        entire_scf_dm = eff_scf.make_rdm1(eff_scf.mo_coeff, eff_scf.mo_occ)
         env_a = numpy.dot(self.orth_coeff, self.env_orb[0])
         env_b = numpy.dot(self.orth_coeff, self.env_orb[1])
         dm_a = numpy.dot(env_a, env_a.T.conj())
@@ -485,7 +485,7 @@ class UHF(dmet_hf.UHF):
         c_b, e_b, info = lapack.dsygv(fock[1], s[1])
         return (e_a,e_b), (c_a,c_b)
 
-    def set_mo_occ(self, mo_energy, mo_coeff=None):
+    def set_occ(self, mo_energy, mo_coeff=None):
         mo_occ = [numpy.zeros_like(mo_energy[0]), \
                   numpy.zeros_like(mo_energy[1])]
         mo_occ[0][:self.nelectron_alpha] = 1
@@ -507,7 +507,7 @@ class UHF(dmet_hf.UHF):
         log.debug(self, '  mo_energy = %s', mo_energy[1])
         return mo_occ
 
-    def calc_den_mat(self, mo_coeff, mo_occ):
+    def make_rdm1(self, mo_coeff, mo_occ):
         mo_a = mo_coeff[0][:,mo_occ[0]>0]
         mo_b = mo_coeff[1][:,mo_occ[1]>0]
         dm_a = numpy.dot(mo_a, mo_a.T.conj())
@@ -601,7 +601,7 @@ class UHF(dmet_hf.UHF):
 #               * numpy.linalg.det(reduce(numpy.dot,(mo0_b.T.conj(),s,mo1_b)))
 #        log.info(self, 'overlap of determinants after SCF = %.15g', abs(ovlp * norm))
 
-        dm = self.calc_den_mat(self.mo_coeff_on_imp, self.mo_occ)
+        dm = self.make_rdm1(self.mo_coeff_on_imp, self.mo_occ)
         vhf = self.get_veff(self.mol, dm)
         self.e_frag, self.n_elec_frag = \
                 self.calc_frag_elec_energy(self.mol, vhf, dm)
@@ -650,7 +650,7 @@ class UHF(dmet_hf.UHF):
         eff_scf = self.entire_scf
         mo_a = numpy.dot(c_inv, eff_scf.mo_coeff[0])
         mo_b = numpy.dot(c_inv, eff_scf.mo_coeff[1])
-        dm0 = eff_scf.calc_den_mat((mo_a,mo_b), eff_scf.mo_occ)
+        dm0 = eff_scf.make_rdm1((mo_a,mo_b), eff_scf.mo_occ)
         # in case impurity sites are not the AO orbitals
         mo_a = reduce(numpy.dot, (c_inv, self.impbas_coeff[0], \
                                   self.mo_coeff_on_imp[0]))
@@ -1095,13 +1095,13 @@ def gho_scf(mol, mm_atm_lst, mm_charge=0, mm_chg_lst=None, emb=None, \
     ghohf.get_hcore = eff_hcore
     ghohf.get_ovlp = lambda x: numpy.eye(orth_coeff.shape[1])
     ghohf.get_veff = eff_vhf
-    ghohf.init_guess_method = init_guess
+    ghohf.make_init_guess = init_guess
 
     res = ghohf.scf()
     if emb is not None:
-        scfdm = emb.entire_scf.calc_den_mat(emb.entire_scf.mo_coeff, \
-                                            emb.entire_scf.mo_occ)
-        ghodm = ghohf.calc_den_mat(ghohf.mo_coeff, ghohf.mo_occ)
+        scfdm = emb.entire_scf.make_rdm1(emb.entire_scf.mo_coeff, \
+                                         emb.entire_scf.mo_occ)
+        ghodm = ghohf.make_rdm1(ghohf.mo_coeff, ghohf.mo_occ)
         gen_diff_dm(emb.mol, ghodm, scfdm, emb)
 
         v1 = pmol.intor_symmetric('cint1e_nuc_sph')
@@ -1187,9 +1187,9 @@ def gho_scf_compare_auxorb(emb, mm_atm_lst, mm_charge=0, mm_chg_lst=None):
 
     res = ghoemb.imp_scf()
 
-    scfdm = emb.entire_scf.calc_den_mat(emb.entire_scf.mo_coeff, \
-                                        emb.entire_scf.mo_occ)
-    ghodm = ghoemb.calc_den_mat(ghoemb.mo_coeff_on_imp, ghoemb.mo_occ)
+    scfdm = emb.entire_scf.make_rdm1(emb.entire_scf.mo_coeff, \
+                                     emb.entire_scf.mo_occ)
+    ghodm = ghoemb.make_rdm1(ghoemb.mo_coeff_on_imp, ghoemb.mo_occ)
     gen_diff_dm(emb.mol, ghodm, scfdm, emb)
 
     vnuc_mm = 0
