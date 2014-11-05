@@ -123,19 +123,3 @@ class EmbSysPeriod(dmet_nonsc.EmbSys):
     def fullsys(self, init_v=None):
         return self.one_shot(mol)
 
-if __name__ == '__main__':
-    from pyscf import scf
-    from pyscf import gto
-    mol = gto.Mole()
-    mol.verbose = 5
-    mol.output = 'out_dmet_1shot'
-    mol.build()
-
-    mf = hf.RHF(mol, 'C_solid_2x2x2/test2/FCIDUMP.CLUST.GTO',
-                'C_solid_2x2x2/test2/JKDUMP')
-    energy = mf.scf()
-    print energy
-
-    emb = OneImp(mf, [0,1,2,3])
-    print dmet_1shot(mol, emb)
-

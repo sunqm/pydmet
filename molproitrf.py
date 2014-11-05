@@ -31,6 +31,7 @@ h=sto-3g,
 }
 geometry={@GEOM}
 charge=@CHARGE
+spin=0
 {hf; maxit,1}
 {matrop,read,orb,type=orbitals,file=orb.matrop
 save,orb,2101.2}
@@ -56,6 +57,7 @@ h=sto-3g,
 }
 geometry={@GEOM}
 charge=@CHARGE
+spin=0
 {hf; maxit,1}
 {matrop,read,orb,type=orbitals,file=orb.matrop
 save,orb,2101.2}
@@ -66,7 +68,7 @@ hamiltonian,'fcidump'
 @METHOD
 '''
 
-def simple_inp(method, nmo, nelec, with_1pdm=False):
+def simple_inp(method, nmo, nelec, with_1pdm=False, spin=0):
     if with_1pdm:
         template = Tsimple
     else:
@@ -76,6 +78,7 @@ def simple_inp(method, nmo, nelec, with_1pdm=False):
     template = re.sub('@GEOM', geom, template)
     template = re.sub('@CHARGE', str(nmo-nelec), template)
     template = re.sub('@METHOD', method, template)
+    template = re.sub('@SPIN', str(spin), template)
     return template
 
 def _key_multi(ncore, nocc, caslist=None):
@@ -92,11 +95,11 @@ def _key_multi(ncore, nocc, caslist=None):
     return method
 
 def mr_inp(method, nmo, nelec, ncas, nelecas, with_1pdm=False,
-           caslist=None):
+           caslist=None, spin=0):
     ncore = (nelec - nelecas) / 2
     nocc = ncore + ncas
     method = '%s\n%s' % (_key_multi(ncore, nocc, caslist), method)
-    return simple_inp(method, nmo, nelec, with_1pdm)
+    return simple_inp(method, nmo, nelec, with_1pdm, spin=0)
 
 
 def write_matrop(fname, mat):
@@ -160,19 +163,19 @@ def call_molpro(h1e, eri, mo, nelec, inputstr, log=None):
 #TODO:    return ao2mo.restore(8, eri1) * .25
 
 
-def simple_call(method, verbose=0):
+def simple_call(method, spin=0, verbose=0):
     def f(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
         log = lib.logger.Logger(mol.stdout, verbose)
-        input = simple_inp(method, mo.shape[1], nelec, with_1pdm)
+        input = simple_inp(method, mo.shape[1], nelec, with_1pdm, spin=spin)
         escf, eci, rdm1 = call_molpro(h1e, eri, mo, nelec, input, log=log)
         return escf, eci, None, rdm1
     return f
 
-def mr_call(method, ncas, nelecas, caslist=None, verbose=0):
+def mr_call(method, ncas, nelecas, caslist=None, spin=0, verbose=0):
     def f(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
         log = lib.logger.Logger(mol.stdout, verbose)
         input = mr_inp(method, mo.shape[1], nelec,
-                       ncas, nelecas, with_1pdm, caslist)
+                       ncas, nelecas, with_1pdm, caslist, spin=spin)
         escf, eci, rdm1 = call_molpro(h1e, eri, mo, nelec, input, log=log)
         return escf, eci, None, rdm1
     return f

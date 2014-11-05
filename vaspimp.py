@@ -104,8 +104,7 @@ class OneImpOnCLUSTDUMP(OneImp):
         self.nelectron = int(effscf.mo_occ.sum()) - self.env_orb.shape[1] * 2
         log.info(self, 'number of electrons for impurity  = %d', \
                  self.nelectron)
-        self.energy_by_env, self._vhf_env = \
-                self.init_vhf_env(self.env_orb)
+        self.energy_by_env, self._vhf_env = self.init_vhf_env(self.env_orb)
 
     def init_vhf_env(self, env_orb):
         nemb = self._vasphf['NEMB']

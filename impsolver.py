@@ -10,7 +10,7 @@ from pyscf import scf
 from pyscf import lib
 from pyscf import ao2mo
 from pyscf import tools
-from pyscf.future import mcscf
+from pyscf import mcscf
 import pyscf.future.fci.direct_spin0 as fci_direct
 import pyscf.tools.fcidump
 

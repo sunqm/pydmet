@@ -135,9 +135,8 @@ class EmbSys(object):
         try:
             with open(self.init_v, 'r') as f:
                 v_add, v_add_on_ao = pickle.load(f)
-            self.entire_scf = run_hf_with_ext_pot_(mol, self.entire_scf,
-                                                   v_add_on_ao, \
-                                                   self.hf_follow_state)
+            self.entire_scf = self.run_hf_with_ext_pot_(v_add_on_ao, \
+                                                        self.hf_follow_state)
             v_group = []
             for m,_,bas_idx in self.uniq_frags:
                 v_group.append(v_add[bas_idx][:,bas_idx])
@@ -151,9 +150,8 @@ class EmbSys(object):
             #        v = (v + v.T) * .1
             #        for i, j in enumerate(bas_idx):
             #            v_global[j,bas_idx] = v[i]
-            #    self.entire_scf = run_hf_with_ext_pot_(mol, self.entire_scf,
-            #                                          v_global, \
-            #                                          self.hf_follow_state)
+            #    self.entire_scf = self.run_hf_with_ext_pot_(v_global, \
+            #                                                self.hf_follow_state)
             v_group = v0_group
 
         embs = self.init_embs(mol, self.entire_scf, self.orth_coeff)
@@ -368,8 +366,7 @@ class EmbSys(object):
         else:
             v_add = self.assemble_to_blockmat(v_mf_group)
         v_add_ao = self.mat_orthao2ao(v_add)
-        eff_scf = run_hf_with_ext_pot_(mol, self.entire_scf, v_add_ao, \
-                                       self.hf_follow_state)
+        eff_scf = self.run_hf_with_ext_pot_(v_add_ao, self.hf_follow_state)
         self.entire_scf = eff_scf
         for emb in self.embs:
             emb.entire_scf = eff_scf
@@ -380,8 +377,7 @@ class EmbSys(object):
 
 #?    def update_embsys_vglobal(self, mol, v_add):
 #?        v_add_ao = self.mat_orthao2ao(v_add)
-#?        eff_scf = run_hf_with_ext_pot_(mol, self.entire_scf, v_add_ao, \
-#?                                      self.hf_follow_state)
+#?        eff_scf = self.run_hf_with_ext_pot_(v_add_ao, self.hf_follow_state)
 #?        self.entire_scf = eff_scf
 #?        for emb in self.embs:
 #?            emb.entire_scf = eff_scf
@@ -392,6 +388,9 @@ class EmbSys(object):
 #?        embs = self.update_embs(mol, self.embs, eff_scf)
 #?        self.embs = self.update_embs_vfit_mf(mol, embs, v_group)
 #?        return self
+
+    def run_hf_with_ext_pot_(self, vext_on_ao, follow_state=False):
+        run_hf_with_ext_pot_(self.mol, self.entire_scf, vext_on_ao, follow_state)
 
 
     def assemble_frag_energy(self, mol):

@@ -15,6 +15,7 @@ from pyscf import scf
 from pyscf import lib
 import pyscf.lib.logger as log
 import pyscf.lib.parameters as param
+import vasp
 
 
 class RHF(scf.hf.RHF):
@@ -37,7 +38,6 @@ class RHF(scf.hf.RHF):
             return 0, dm
         self.make_init_guess = _initguess
         self._eri = self._fcidump['ERI']
-        self.eri_in_memory = True
 
     def get_hcore(self, mol=None):
         return self._hcore
@@ -78,7 +78,6 @@ class RHF4test(scf.hf.RHF):
             return 0, dm
         self.make_init_guess = _initguess
         self._eri = self._fcidump['ERI']
-        self.eri_in_memory = True
 
     def get_hcore(self, mol=None):
         return self._fcidump['HCORE']
@@ -306,6 +305,7 @@ def read_jkdump(fcidump):
     dic['K'] = vk
     sys.stdout.write('Finish reading %s\n' % fcidump)
     return dic
+
 
 if __name__ == '__main__':
     mol = gto.Mole()
