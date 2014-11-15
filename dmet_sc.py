@@ -8,7 +8,7 @@ import copy
 from pyscf import scf
 import pyscf.lib.parameters as param
 import pyscf.lib.logger as log
-from pyscf.future import lo
+from pyscf import lo
 from pyscf import tools
 import pyscf.tools.dump_mat
 import dmet_hf

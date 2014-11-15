@@ -12,7 +12,7 @@ from pyscf import lib
 import pyscf.lib.parameters as param
 import pyscf.lib.logger as log
 from pyscf import ao2mo
-from pyscf.future import lo
+from pyscf import lo
 
 
 def select_ao_on_fragment(mol, atm_lst, bas_idx=[]):
