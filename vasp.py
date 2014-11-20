@@ -252,7 +252,7 @@ C    SP
 
     def run(self, vaspcmd):
         # call VASP
-        if not os.path.isfile(vaspcmd):
+        if not os.path.isfile(vaspcmd.split()[-1]):
             raise RuntimeError('VASP not found. Plz check settings.py')
         cmd = '%s >> %s 2> %s' % (vaspcmd, self.stdout, self.stderr)
         exitcode = os.system(cmd)

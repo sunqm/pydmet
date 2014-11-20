@@ -79,7 +79,7 @@ class EmbSysPeriod(dmet_sc.EmbSys):
     def run_hf_with_ext_pot_(self, vext_on_ao, follow_state=False):
         with open('CorrPot', 'w') as fcorrpot:
             for v in vext_on_ao.flatten():
-                fcorrpot.write('%.16g' % v)
+                fcorrpot.write('%.16g\n' % v)
         vasp_scf = vasp.Vasp()
         log.debug(self, 'Call Vasp HF')
         vasp_scf.run_hf(ENCUT=self.pwcut, NBANDS=self.nbands, EDIFF=1e-9)
