@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import subprocess
 import numpy
 import scipy
 import scipy.optimize
@@ -19,6 +20,11 @@ from dmet_sc import *
 
 class EmbSysPeriod(dmet_sc.EmbSys):
     def __init__(self, fcidump, jdump, kdump, fockdump, init_v=None):
+        self.fcidump =  fcidump
+        self.jdump =    jdump
+        self.kdump =    kdump
+        self.fockdump = fockdump
+        self.vasp_inpfile_pass2 = ''
         self._vasphf = vaspimp.read_clustdump(fcidump, jdump, kdump, fockdump)
         fake_hf = vaspimp.fake_entire_scf(self._vasphf)
         dmet_sc.EmbSys.__init__(self, fake_hf.mol, fake_hf, init_v=None)
@@ -80,16 +86,28 @@ class EmbSysPeriod(dmet_sc.EmbSys):
         with open('CorrPot', 'w') as fcorrpot:
             for v in vext_on_ao.flatten():
                 fcorrpot.write('%.16g\n' % v)
-        vasp_scf = vasp.Vasp()
-        log.debug(self, 'Call Vasp HF')
-        vasp_scf.run_hf(ENCUT=self.pwcut, NBANDS=self.nbands, EDIFF=1e-9)
-        vasp_scf.run_jkdump(ENCUT=self.pwcut, ENCUTGW=self.cutri, NBANDS=self.nbands)
-        vasp_scf.run_clustdump(ENCUT=self.pwcut, ENCUTGW=self.cutri, NBANDS=self.nbands)
-        self._vasphf = vaspimp.read_clustdump('FCIDUMP.CLUST.GTO',
-                                              'JDUMP', 'KDUMP', 'FOCKDUMP')
-        mf = vaspimp.fake_entire_scf(self._vasphf)
-        #print numpy.linalg.norm(mf.mo_coeff), numpy.linalg.svd(mf.mo_coeff)[1]
-        return mf
+        retcode = subprocess.call('bash %s' % self.vasp_inpfile_pass2)
+        if retcode:
+            self._vasphf = vaspimp.read_clustdump(self.fcidump, self.jdump,
+                                                  self.kdump, self.fockdump)
+            mf = vaspimp.fake_entire_scf(self._vasphf)
+            return mf
+        else:
+            raise OSError('Failed to execute %s' % self.vasp_inpfile_pass2)
+#    def run_hf_with_ext_pot_(self, vext_on_ao, follow_state=False):
+#        with open('CorrPot', 'w') as fcorrpot:
+#            for v in vext_on_ao.flatten():
+#                fcorrpot.write('%.16g\n' % v)
+#        vasp_scf = vasp.Vasp()
+#        log.debug(self, 'Call Vasp HF')
+#        vasp_scf.run_hf(ENCUT=self.pwcut, NBANDS=self.nbands, EDIFF=1e-9)
+#        vasp_scf.run_jkdump(ENCUT=self.pwcut, ENCUTGW=self.cutri, NBANDS=self.nbands)
+#        vasp_scf.run_clustdump(ENCUT=self.pwcut, ENCUTGW=self.cutri, NBANDS=self.nbands)
+#        self._vasphf = vaspimp.read_clustdump('FCIDUMP.CLUST.GTO',
+#                                              'JDUMP', 'KDUMP', 'FOCKDUMP')
+#        mf = vaspimp.fake_entire_scf(self._vasphf)
+#        #print numpy.linalg.norm(mf.mo_coeff), numpy.linalg.svd(mf.mo_coeff)[1]
+#        return mf
 
 def run_vasp_scf(nbands, pwcut, cutri):
     vasp_scf = vasp.Vasp()
