@@ -11,8 +11,7 @@ from pyscf import lib
 from pyscf import ao2mo
 from pyscf import tools
 from pyscf import mcscf
-import pyscf.fci.direct_spin0 as fci_direct
-import pyscf.tools.fcidump
+import pyscf.fci
 
 class ImpSolver(object):
     def __init__(self, solver):
@@ -124,58 +123,17 @@ def psi4ccsd_t(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
     return _psi4cc(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag, 'CCSD(T)')
 
 
-
-#FCIEXE = os.path.dirname(__file__) + '/fci'
-#
-#def fci(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
-#    tmpfile = tempfile.NamedTemporaryFile()
-#    nmo = mo.shape[1]
-#    tools.fcidump.from_integrals(tmpfile.name, h1e, eri, nmo, nelec, 0)
-#
-#    cmd = [FCIEXE,
-#           '--subspace-dimension=16',
-#           '--basis=Input']
-#    if with_1pdm:
-#        filedm1 = tempfile.NamedTemporaryFile()
-#        cmd.append('--save-rdm1=%s' % filedm1.name)
-#    if with_e2frag:
-#        nimp = with_e2frag
-#        cmd.append('--ptrace=%i' % with_e2frag)
-#    cmd.append(tmpfile.name)
-#
-#    rec = commands.getoutput(' '.join(cmd))
-#
-#    rdm1 = []
-#    if with_1pdm:
-#        with open(filedm1.name, 'r') as fin:
-#            n = int(fin.readline().split()[-1])
-#            for d in fin.readlines():
-#                rdm1.append(map(float, d.split()))
-#        rdm1 = numpy.array(rdm1).reshape(n,n)
-#
-#    e2frag = 0
-#    if with_e2frag:
-#        e2frag = find_fci_key(rec, '!FCI STATE 1 pTraceSys')
-#
-#    return 0, find_fci_key(rec, '!FCI STATE 1 ENERGY'), e2frag, rdm1
-#
-#def find_fci_key(rec, key):
-#    for dl in rec.splitlines():
-#        if key in dl:
-#            val = float(dl.split()[-1])
-#            break
-#    return val
-
 def fci(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
     norb = h1e.shape[1]
-    eci, c = fci_direct.kernel(h1e, eri, norb, nelec)
+    cis = pyscf.fci.solver(mol)
+    eci, c = cis.kernel(h1e, eri, norb, nelec)
     if with_1pdm:
-        dm1 = fci_direct.make_rdm1(c, norb, nelec)
+        dm1 = cis.make_rdm1(c, norb, nelec)
     else:
         dm1 = None
     if with_e2frag:
         eri1 = part_eri_hermi(eri, norb, with_e2frag)
-        e2frag = fci_direct.energy(numpy.zeros_like(h1e), eri1, c, norb, nelec)
+        e2frag = cis.energy(numpy.zeros_like(h1e), eri1, c, norb, nelec)
     else:
         e2frag = None
     return 0, eci, e2frag, dm1

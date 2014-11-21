@@ -159,7 +159,6 @@ class OneImpOnCLUSTDUMP(OneImp):
         return self.hf_energy
 
 def read_clustdump(fcidump, jdump, kdump, fockdump):
-    print fcidump
     dic = {}
     finp = open(jdump, 'r')
     dat = re.split('[=,]', finp.readline())
