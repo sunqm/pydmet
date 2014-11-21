@@ -63,7 +63,7 @@ class EmbSys(object):
         self.verbose = mol.verbose
         self.stdout = mol.stdout
         self.mol = mol
-        self.emb_verbose = log.QUITE
+        self.emb_verbose = log.QUIET
         self.OneImp = dmet_hf.RHF
 
         self.max_iter         = 40
