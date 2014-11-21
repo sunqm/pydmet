@@ -84,7 +84,8 @@ class EmbSysPeriod(dmet_sc.EmbSys):
 
     def run_hf_with_ext_pot_(self, vext_on_ao, follow_state=False):
         with open('CorrPot', 'w') as fcorrpot:
-            for v in vext_on_ao.flatten():
+            nimp = self.embs[0].imp_site.shape[1]
+            for v in vext_on_ao[:nimp,:nimp].flatten():
                 fcorrpot.write('%.16g\n' % v)
         retcode = subprocess.call('bash %s' % self.vasp_inpfile_pass2, shell=True)
         if retcode:
