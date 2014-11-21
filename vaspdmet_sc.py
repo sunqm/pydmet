@@ -86,7 +86,7 @@ class EmbSysPeriod(dmet_sc.EmbSys):
         with open('CorrPot', 'w') as fcorrpot:
             for v in vext_on_ao.flatten():
                 fcorrpot.write('%.16g\n' % v)
-        retcode = subprocess.call('bash %s' % self.vasp_inpfile_pass2)
+        retcode = subprocess.call('bash %s' % self.vasp_inpfile_pass2, shell=True)
         if retcode:
             self._vasphf = vaspimp.read_clustdump(self.fcidump, self.jdump,
                                                   self.kdump, self.fockdump)
