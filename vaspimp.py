@@ -159,6 +159,7 @@ class OneImpOnCLUSTDUMP(OneImp):
         return self.hf_energy
 
 def read_clustdump(fcidump, jdump, kdump, fockdump):
+    print fcidump
     dic = {}
     finp = open(jdump, 'r')
     dat = re.split('[=,]', finp.readline())
@@ -174,12 +175,8 @@ def read_clustdump(fcidump, jdump, kdump, fockdump):
     vj = numpy.zeros((norb,norb))
     dat = finp.readline().split()
     while dat:
-        i, j = map(int, dat[2:4])
-        val = map(float, dat[:2])
-        if abs(val[1]) > 1e-12:
-            print i,j, val
-            assert(abs(val[1]) < 1e-9)
-        vj[i-1,j-1] = val[0]
+        i, j = map(int, dat[1:3])
+        vj[i-1,j-1] = float(dat[0])
         dat = finp.readline().split()
 
     finp = open(kdump, 'r')
@@ -191,12 +188,8 @@ def read_clustdump(fcidump, jdump, kdump, fockdump):
     vk = numpy.zeros((norb,norb))
     dat = finp.readline().split()
     while dat:
-        i, j = map(int, dat[2:4])
-        val = map(float, dat[:2])
-        #if abs(val[1]) > 1e-12:
-        #    print i,j, val
-        #    assert(abs(val[1]) < 1e-5)
-        vk[i-1,j-1] = val[0]
+        i, j = map(int, dat[1:3])
+        vk[i-1,j-1] = float(dat[0])
         dat = finp.readline().split()
 
     finp = open(fockdump, 'r')
@@ -209,15 +202,11 @@ def read_clustdump(fcidump, jdump, kdump, fockdump):
     mo_energy = numpy.zeros(norb)
     dat = finp.readline().split()
     while dat:
-        i, j = map(int, dat[2:4])
-        val = map(float, dat[:2])
-        #if abs(val[1]) > 1e-12:
-        #    print i,j, val
-        #    assert(abs(val[1]) < 1e-5)
+        i, j = map(int, dat[1:3])
         if j == 0:
-            mo_energy[i-1] = val[0]
+            mo_energy[i-1] = float(dat[0])
         else:
-            fock[i-1,j-1] = val[0]
+            fock[i-1,j-1] = float(dat[0])
         dat = finp.readline().split()
     dic['MO_ENERGY'] = mo_energy
 
@@ -242,20 +231,13 @@ def read_clustdump(fcidump, jdump, kdump, fockdump):
     eri = numpy.zeros((npair,npair))
     dat = finp.readline().split()
     while dat:
-        i, j, k, l = map(int, dat[2:])
-        val = map(float, dat[:2])
-        if abs(val[1]) > 1e-12:
-            if abs(val[1]) > 1e-9:
-                print i,j,k,l
-                assert(abs(val[1]) < 1e-9)
-            else:
-                print 'imaginary part /= 0', i,j,k,l, val
+        i, j, k, l = map(int, dat[1:])
         if k == 0 and l == 0:
-            h1emb[i-1,j-1] = h1emb[j-1,i-1] = val[0]
+            h1emb[i-1,j-1] = h1emb[j-1,i-1] = float(dat[0])
         elif l == -1:
-            mo_coeff[i-1,j-1] = val[0]
+            mo_coeff[i-1,j-1] = float(dat[0])
         elif l == -2:
-            embasis[i-1,j-1] = val[0]
+            embasis[i-1,j-1] = float(dat[0])
         else:
             if i >= j:
                 ij = (i-1)*i/2 + j-1
@@ -265,7 +247,7 @@ def read_clustdump(fcidump, jdump, kdump, fockdump):
                 kl = (k-1)*k/2 + l-1
             else:
                 kl = (l-1)*l/2 + k-1
-            eri[ij,kl] = eri[kl,ij] = val[0]
+            eri[ij,kl] = eri[kl,ij] = float(dat[0])
         dat = finp.readline().split()
     dic['MO_COEFF'] = mo_coeff
     dic['FOCK'] = reduce(numpy.dot, (mo_coeff, fock, mo_coeff.T))
