@@ -88,7 +88,7 @@ class EmbSysPeriod(dmet_sc.EmbSys):
             for v in vext_on_ao[:nimp,:nimp].flatten():
                 fcorrpot.write('%.16g\n' % v)
         retcode = subprocess.call('bash %s' % self.vasp_inpfile_pass2, shell=True)
-        if retcode:
+        if not retcode:
             self._vasphf = vaspimp.read_clustdump(self.fcidump, self.jdump,
                                                   self.kdump, self.fockdump)
             mf = vaspimp.fake_entire_scf(self._vasphf)
