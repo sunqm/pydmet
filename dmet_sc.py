@@ -287,12 +287,6 @@ class EmbSys(object):
                     emb.vfit_mf = v_mf_group[m]
 
 #?        # should we add mean-field potentail on the impurity solver?
-#?        v_mf_group = [emb.vfit_mf for emb in embs]
-#?        if self.with_hopping:
-#?            vglobal = self.assemble_to_fullmat(v_mf_group)
-#?        else:
-#?            vglobal = self.assemble_to_blockmat(v_mf_group)
-#?
 #?        for m, emb in enumerate(embs):
 #?            if self.env_pot_for_ci == NO_ENV_POT:
 #?                pass
@@ -629,6 +623,7 @@ def fit_fixed_mf_dm(mol, embsys):
 
 
 def fit_chemical_potential(mol, emb, embsys):
+# correlation potential of embedded-HF is not added to correlated-solver
     import scipy.optimize
     nimp = len(emb.bas_on_frag)
     nelec_frag = emb._project_nelec_frag

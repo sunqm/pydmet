@@ -59,19 +59,15 @@ class CASSCF(ImpSolver):
 def simple_hf(h1e, eri, mo, nelec):
     mol = gto.Mole()
     mol.verbose = 0
-    mol.output = '/dev/null'
+    mol.output = None
     mol.build(False, False)
+    mol.nelectron = nelec
     mf = scf.RHF(mol)
     nocc = nelec / 2
     mf.make_init_guess = \
             lambda mol: (0, numpy.dot(mo[:,:nocc],mo[:,:nocc].T)*2)
     mf.get_hcore = lambda mol: h1e
     mf.get_ovlp = lambda mol: numpy.eye(mo.shape[1])
-    def _set_occ(mo_energy, mo_coeff=None):
-        mo_occ = numpy.zeros_like(mo_energy)
-        mo_occ[:nocc] = 2
-        return mo_occ
-    mf.set_occ = _set_occ
     mf._eri = eri
 
     scf_conv, hf_energy, mo_energy, mo_occ, mo_coeff \
@@ -133,6 +129,7 @@ def fci(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
 
     norb = h1e.shape[1]
     cis = pyscf.fci.solver(mol)
+    cis.verbose = 0
     eci, c = cis.kernel(h1e, eri1, norb, nelec)
     if with_1pdm:
         dm1 = cis.make_rdm1(c, norb, nelec)

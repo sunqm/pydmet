@@ -149,15 +149,16 @@ environment two-electron part'''
 
         # ne = Tr(D S)
         # ne^A = Tr(D P^A S)
-        nelec_frag = lib.trace_ab(dm_frag, s1e)
+        nelec_frag = numpy.einsum('ij,ji', dm_frag, s1e)
         log.info(self, 'number of electrons in fragment = %.15g', \
                  nelec_frag.real)
 
-        e = lib.trace_ab(dm_frag, h1e-self._vhf_env) \
-                + lib.trace_ab(dm_frag, vhf+self._vhf_env) * .5
+        e = numpy.einsum('ij,ji', dm_frag, h1e-self._vhf_env) \
+          + numpy.einsum('ij,ji', dm_frag, vhf+self._vhf_env) * .5
         log.info(self, 'fragment electronic energy = %.15g', e.real)
         log.debug(self, ' ~ total energy (non-variational) = %.15g', \
-                  lib.trace_ab(dm, h1e) + lib.trace_ab(dm, vhf)*.5 \
+                  numpy.einsum('ij,ji', dm, h1e) \
+                  + numpy.einsum('ij,ji', dm, vhf)*.5 \
                   + self.energy_by_env)
         return e.real, nelec_frag.real
 
@@ -620,21 +621,22 @@ class UHF(dmet_hf.UHF):
 
         # ne = Tr(D S)
         # ne^A = Tr(D P^A S)
-        nelec_frag = lib.trace_ab(dm_frag_a, s1e[0]) \
-                + lib.trace_ab(dm_frag_b, s1e[1])
+        nelec_frag = numpy.einsum('ij,ji', dm_frag_a, s1e[0]) \
+                   + numpy.einsum('ij,ji', dm_frag_b, s1e[1])
         log.info(self, 'number of electrons in fragment = %.15g', \
                  nelec_frag.real)
 
-        e = lib.trace_ab(dm_frag_a, h1e[0]-self._vhf_env[0]) \
-                + lib.trace_ab(dm_frag_b, h1e[1]-self._vhf_env[1]) \
-                + lib.trace_ab(dm_frag_a, vhf[0] + self._vhf_env[0]) * .5 \
-                + lib.trace_ab(dm_frag_b, vhf[1] + self._vhf_env[1]) * .5
+        e = numpy.einsum('ij,ji', dm_frag_a, h1e[0]-self._vhf_env[0]) \
+          + numpy.einsum('ij,ji', dm_frag_b, h1e[1]-self._vhf_env[1]) \
+          + numpy.einsum('ij,ji', dm_frag_a, vhf[0] + self._vhf_env[0]) * .5 \
+          + numpy.einsum('ij,ji', dm_frag_b, vhf[1] + self._vhf_env[1]) * .5
         log.info(self, 'fragment electronic energy = %.15g', e.real)
         log.debug(self, ' ~ total energy (non-variational) = %.15g', \
-                  (lib.trace_ab(dm[0], h1e[0])+lib.trace_ab(dm[1], h1e[1]) \
-                   + lib.trace_ab(dm[0], vhf[0])*.5 \
-                   + lib.trace_ab(dm[1], vhf[1])*.5 \
-                   + self.energy_by_env))
+                  (numpy.einsum('ij,ji', dm[0], h1e[0])
+                  +numpy.einsum('ij,ji', dm[1], h1e[1]) \
+                  +numpy.einsum('ij,ji', dm[0], vhf[0])*.5 \
+                  +numpy.einsum('ij,ji', dm[1], vhf[1])*.5 \
+                  +self.energy_by_env))
         return e.real, nelec_frag.real
 
     def frag_mulliken_pop(self):

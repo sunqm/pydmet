@@ -3,7 +3,7 @@
 import os
 import tempfile
 import numpy
-import scipy.linalg.flapack as lapack
+import scipy.linalg
 import h5py
 
 from pyscf import gto
@@ -54,7 +54,7 @@ def decompose_den_mat(emb, dm_orth, bas_on_frag, num_bath=-1):
     nimp = bas_on_frag.__len__()
     frag_dm = dm_orth[bas_on_frag,:][:,bas_on_frag]
     log.debug(emb, 'entanglement weight (= sqrt(occs)),  occ')
-    w, pre_nao = numpy.linalg.eigh(frag_dm)
+    w, pre_nao = scipy.linalg.eigh(frag_dm)
     idx, not_idx, rest_idx = _pick_bath_idx(w, num_bath, emb.occ_env_cutoff)
     if emb.verbose >= param.VERBOSE_DEBUG:
         for i in idx:
@@ -85,7 +85,7 @@ def decompose_den_mat(emb, dm_orth, bas_on_frag, num_bath=-1):
     for i in bas_on_frag:
         proj[i,i] -= 1
     dm_env = reduce(numpy.dot, (proj, dm_orth, proj))
-    w, env_orb = numpy.linalg.eigh(dm_env)
+    w, env_orb = scipy.linalg.eigh(dm_env)
     env_orb = env_orb[:,w>.1] #remove orbitals with eigenvalue ~ 0
     return numpy.eye(nimp), bath_orb, env_orb
 
@@ -364,7 +364,8 @@ class RHF(scf.hf.RHF):
 
         e = (dm[:nimp]*(h1e-self._vhf_env)[:nimp]).sum() \
           + (dm[:nimp]*(vhf+self._vhf_env)[:nimp]).sum() * .5
-        e_tot = lib.trace_ab(dm, h1e) + lib.trace_ab(dm, vhf)*.5 \
+        e_tot = numpy.einsum('ij,ji', dm, h1e) \
+              + numpy.einsum('ij,ji', dm, vhf)*.5 \
               + self.energy_by_env
         log.info(self, 'fragment electronic energy = %.15g', e)
         log.debug(self, ' ~ total energy (non-variational) = %.15g', e_tot)
@@ -578,10 +579,10 @@ class UHF(RHF, scf.hf.UHF):
                               numpy.dot(env_b, env_b.T.conj())])
         vhf_env_ao = scf.hf.UHF.get_veff(self.entire_scf, self.mol, dm_env)
         hcore = scf.hf.UHF.get_hcore(mol)
-        energy_by_env = lib.trace_ab(dm_env[0], hcore[0]) \
-                      + lib.trace_ab(dm_env[1], hcore[1]) \
-                      + lib.trace_ab(dm_env[0], vhf_env_ao[0]) * .5 \
-                      + lib.trace_ab(dm_env[1], vhf_env_ao[1]) * .5
+        energy_by_env = numpy.einsum('ij,ji', dm_env[0], hcore[0]) \
+                      + numpy.einsum('ij,ji', dm_env[1], hcore[1]) \
+                      + numpy.einsum('ij,ji', dm_env[0], vhf_env_ao[0]) * .5 \
+                      + numpy.einsum('ij,ji', dm_env[1], vhf_env_ao[1]) * .5
         return energy_by_env, self.mat_ao2impbas(vhf_env_ao)
 
     def mat_ao2impbas(self, mat):
@@ -661,8 +662,8 @@ class UHF(RHF, scf.hf.UHF):
         return (h1e[0]+vhf[0], h1e[1]+vhf[1])
 
     def eig(self, fock, s):
-        c_a, e_a, info = lapack.dsygv(fock[0], s[0])
-        c_b, e_b, info = lapack.dsygv(fock[1], s[1])
+        e_a, c_a = scipy.linalg.eigh(fock[0], s[0])
+        e_b, c_b = scipy.linalg.eigh(fock[1], s[1])
         return (e_a,e_b), (c_a,c_b)
 
     def set_occ(self, mo_energy, mo_coeff=None):
@@ -781,10 +782,10 @@ class UHF(RHF, scf.hf.UHF):
           + (dm[1][:nimp]*(h1e[1]-self._vhf_env[1])[:nimp]).sum() \
           + (dm[0][:nimp]*(vhf[0]+self._vhf_env[0])[:nimp]).sum()*.5 \
           + (dm[1][:nimp]*(vhf[1]+self._vhf_env[1])[:nimp]).sum()*.5
-        e_tot = lib.trace_ab(dm[0], h1e[0]) \
-              + lib.trace_ab(dm[1], h1e[1]) \
-              + lib.trace_ab(dm[0], vhf[0])*.5 \
-              + lib.trace_ab(dm[1], vhf[1])*.5 \
+        e_tot = numpy.einsum('ij,ji', dm[0], h1e[0]) \
+              + numpy.einsum('ij,ji', dm[1], h1e[1]) \
+              + numpy.einsum('ij,ji', dm[0], vhf[0])*.5 \
+              + numpy.einsum('ij,ji', dm[1], vhf[1])*.5 \
               + self.energy_by_env
         log.info(self, 'fragment electronic energy = %.15g', e)
         log.debug(self, ' ~ total energy (non-variational) = %.15g', e_tot)

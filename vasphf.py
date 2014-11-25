@@ -20,229 +20,82 @@ import vasp
 
 class RHF(scf.hf.RHF):
     ''' RHF from vasp FCIDUMP'''
-    def __init__(self, mol, clustdump, jkdump):
+    def __init__(self, mol, clustdump, jdump, kdump, fockdump):
         scf.hf.RHF.__init__(self, mol)
-        self._fcidump = read_clustdump(clustdump)
-        self._fcidump.update(read_jkdump(jkdump))
-
-        # transform back to AO representation
-        hcore = numpy.diag(self._fcidump['MO_ENERGY'])
-        hcore -= (self._fcidump['J'] - self._fcidump['K'])
-        mo = self._fcidump['MO_COEFF']
-        self._hcore = reduce(numpy.dot, (mo, hcore, mo.T))
-
-        def _initguess(mol):
-            nocc = self._fcidump['NELEC'] / 2
-            mo = self._fcidump['MO_COEFF']
-            dm = numpy.dot(mo[:,:nocc],mo[:,:nocc].T) * 2
-            return 0, dm
-        self.make_init_guess = _initguess
-        self._eri = self._fcidump['ERI']
+        self._vaspdump = read_vaspdump(clustdump, jdump, kdump, fockdump)
+        self.mo_coeff = self._vaspdump['MO_COEFF']
+        self.mo_energy = self._vaspdump['MO_ENERGY']
+        self.mo_occ = numpy.zeros(self._vaspdump['NORB'])
+        self.mo_occ[:self._vaspdump['NELEC']/2] = 2
+        self.mol.nelectron = self._vaspdump['NELEC']
 
     def get_hcore(self, mol=None):
-        return self._hcore
+#TODO read FOCKDUMP, this Fock matrix excludes the correlation potential, it
+# is not identical to the converged Fock matrix of the VASP SCF Fock
+# plus CORRPOTDUMP (if exists) gives the VASP SCF Fock
+        return self._vaspdump['HCORE']
 
     def get_ovlp(self, mol=None):
-        return numpy.eye(self._fcidump['NORB'])
+        return numpy.eye(self._vaspdump['NORB'])
 
-    def set_occ(self, mo_energy, mo_coeff=None):
-        mo_occ = numpy.zeros_like(mo_energy)
-        nocc = self._fcidump['NELEC'] / 2
-        mo_occ[:nocc] = 2
-        if nocc < mo_occ.size:
-            log.debug(self, 'HOMO = %.12g, LUMO = %.12g,', \
-                      mo_energy[nocc-1], mo_energy[nocc])
-        else:
-            log.debug(self, 'HOMO = %.12g,', mo_energy[nocc-1])
-        log.debug(self, '  mo_energy = %s', mo_energy)
-        return mo_occ
 
-    def scf(self):
-        self.dump_flags()
-
-        self.scf_conv, self.hf_energy, \
-                self.mo_energy, self.mo_occ, self.mo_coeff \
-                = self.scf_cycle(self.mol, self.conv_threshold)
-        return self.hf_energy
-
-class RHF4test(scf.hf.RHF):
-    ''' RHF from vasp FCIDUMP'''
-    def __init__(self, mol, fcidump):
-        scf.hf.RHF.__init__(self, mol)
-        self._fcidump = read_fcidump(fcidump)
-        norb = self._fcidump['NORB']
-        def _initguess(mol):
-            dm = numpy.zeros((norb,norb))
-            for i in range(self._fcidump['NELEC']/2):
-                dm[i,i] = 2
-            return 0, dm
-        self.make_init_guess = _initguess
-        self._eri = self._fcidump['ERI']
-
-    def get_hcore(self, mol=None):
-        return self._fcidump['HCORE']
-
-    def get_ovlp(self, mol=None):
-        return numpy.eye(self._fcidump['NORB'])
-
-    def set_occ(self, mo_energy, mo_coeff=None):
-        mo_occ = numpy.zeros_like(mo_energy)
-        nocc = self._fcidump['NELEC'] / 2
-        mo_occ[:nocc] = 2
-        if nocc < mo_occ.size:
-            log.debug(self, 'HOMO = %.12g, LUMO = %.12g,', \
-                      mo_energy[nocc-1], mo_energy[nocc])
-        else:
-            log.debug(self, 'HOMO = %.12g,', mo_energy[nocc-1])
-        log.debug(self, '  mo_energy = %s', mo_energy)
-        return mo_occ
-
-    def scf(self):
-        self.dump_scf_option()
-
-        self.scf_conv, self.hf_energy, \
-                self.mo_energy, self.mo_occ, self.mo_coeff \
-                = self.scf_cycle(self.mol, self.conv_threshold)
-        return self.hf_energy
-
-def read_fcidump(fcidump):
-    sys.stdout.write('Start reading %s\n' % fcidump)
-    dic = {}
-    finp = open(fcidump, 'r')
-    dat = re.split('[=,]', finp.readline())
-    while dat[0]:
-        if 'FCI' in dat[0].upper():
-            dic['NORB'] = int(dat[1])
-            dic['NELEC'] = int(dat[3])
-            dic['MS2'] = int(dat[5])
-        elif 'UHF' in dat[0].upper():
-            if 'TRUE' in dat[1].upper():
-                dic['UHF'] = True
-            else:
-                dic['UHF'] = False
-        elif 'ORBSYM' in dat[0].upper():
-            dic['ORBSYM'] = map(int, finp.readline().split(',')[:-1])
-        elif 'END' in dat[0].upper():
-            break
-        dat = re.split('[=,]', finp.readline())
-    norb = dic['NORB']
-    mo_energy = numpy.zeros(norb)
-    h1e = numpy.zeros((norb,norb))
-    npair = norb*(norb+1)/2
-    eri = numpy.zeros(npair*(npair+1)/2)
-    dat = finp.readline().split()
-    while dat:
-        dat = dat + finp.readline().split()
-        i, j, k, l = map(int, dat[1:])
-        val = map(float, dat[0][1:-1].split(','))
-        if abs(val[1]) > 1e-12:
-            print i,j,k,l
-        assert(abs(val[1]) < 1e-12)
-        if j == 0:
-            mo_energy[i-1] = val[0]
-        elif k == 0:
-            h1e[i-1,j-1] = h1e[j-1,i-1] = val[0]
-        else:
-            if i >= j:
-                ij = (i-1)*i/2 + j-1
-            else:
-                ij = (j-1)*j/2 + i-1
-            if k >= l:
-                kl = (k-1)*k/2 + l-1
-            else:
-                kl = (l-1)*l/2 + k-1
-            if ij >= kl:
-                eri[ij*(ij+1)/2+kl] = val[0]
-            else:
-                eri[kl*(kl+1)/2+ij] = val[0]
-        dat = finp.readline().split()
-    dic['HCORE'] = h1e
-    dic['ERI'] = eri
-    dic['MO_ENERGY'] = mo_energy
-    sys.stdout.write('Finish reading %s\n' % fcidump)
+def read_vaspdump(clustdump, jdump, kdump, fockdump):
+#NOTE read_hfdump returns the integrals in MO representation
+    hfdic = read_hfdump(jdump, kdump, fockdump)
+    dic = read_clustdump(clustdump, hfdic)
+    mo_coeff = dic['MO_COEFF']
+    hfdic['HCORE'] = reduce(numpy.dot, (mo_coeff, hfdic['HCORE'], mo_coeff.T))
+    hfdic['J'] = reduce(numpy.dot, (mo_coeff, hfdic['J'], mo_coeff.T))
+    hfdic['K'] = reduce(numpy.dot, (mo_coeff, hfdic['K'], mo_coeff.T))
+    dic.update(hfdic)
     return dic
 
-def read_fcidump_gto(fcidump):
-    sys.stdout.write('Start reading %s\n' % fcidump)
+def read_clustdump(clustdump, hfdic):
+# ERIs on embedding basis
+# 1-electron Hamiltonian on embedding basis (include correlation potential,
+# which is identical to <embasis|FOCK+CORRPOT-J-K|embasis>) x x 0 0
+# MO coefficients  x x 0 -1
+# embedding basis (represented on MO)  x x 0 -2
+# correlation potential on embedding basis x x 0 -3
     dic = {}
-    finp = open(fcidump, 'r')
+    sys.stdout.write('Start reading %s\n' % clustdump)
+    finp = open(clustdump, 'r')
     dat = re.split('[=,]', finp.readline())
     while dat[0]:
         if 'FCI' in dat[0].upper():
-            dic['NORB'] = int(dat[1])
-            dic['NELEC'] = int(dat[3])
-            dic['MS2'] = int(dat[5])
-        elif 'UHF' in dat[0].upper():
-            if 'TRUE' in dat[1].upper():
-                dic['UHF'] = True
-            else:
-                dic['UHF'] = False
-        elif 'ORBSYM' in dat[0].upper():
-            dic['ORBSYM'] = map(int, finp.readline().split(',')[:-1])
-        elif 'END' in dat[0].upper():
-            break
-        dat = re.split('[=,]', finp.readline())
-    norb = dic['NORB']
-    npair = norb*(norb+1)/2
-    eri = numpy.zeros(npair*(npair+1)/2)
-    dat = finp.readline().split()
-    while dat:
-        dat = dat + finp.readline().split()
-        i, j, k, l = map(int, dat[1:])
-        val = map(float, dat[0][1:-1].split(','))
-        if abs(val[1]) > 1e-12:
-            print i,j,k,l
-        assert(abs(val[1]) < 1e-12)
-        if i >= j:
-            ij = (i-1)*i/2 + j-1
-        else:
-            ij = (j-1)*j/2 + i-1
-        if k >= l:
-            kl = (k-1)*k/2 + l-1
-        else:
-            kl = (l-1)*l/2 + k-1
-        if ij >= kl:
-            eri[ij*(ij+1)/2+kl] = val[0]
-        else:
-            eri[kl*(kl+1)/2+ij] = val[0]
-        dat = finp.readline().split()
-    dic['ERI'] = eri
-    sys.stdout.write('Finish reading %s\n' % fcidump)
-    return dic
-
-def read_clustdump(fcidump):
-    sys.stdout.write('Start reading %s\n' % fcidump)
-    dic = {}
-    finp = open(fcidump, 'r')
-    dat = re.split('[=,]', finp.readline())
-    while dat[0]:
-        if 'FCI' in dat[0].upper():
-            dic['NORB'] = int(dat[1])
-            dic['NELEC'] = int(dat[3])
-            dic['MS2'] = int(dat[5])
+            dic['NEMB'] = int(dat[1])
+            dic['NIMP'] = int(dat[3])
+            dic['NBATH'] = int(dat[5])
         elif 'UHF' in dat[0].upper():
             if 'TRUE' in dat[1].upper():
                 dic['UHF'] = True
             else:
                 dic['UHF'] = False
         elif 'ORBIND' in dat[0].upper():
-            dic['ORBIND'] = map(int, finp.readline().split(',')[:-1])
+            idx = map(int, finp.readline().split(',')[:-1])
+            dic['ORBIND'] = [i-1 for i in idx]  # transform to 0-based indices
         elif 'END' in dat[0].upper():
             break
         dat = re.split('[=,]', finp.readline())
-    norb = dic['NORB']
+    nemb = dic['NEMB']
+    norb = hfdic['NORB']
+    npair = nemb*(nemb+1)/2
+    h1emb = numpy.zeros((nemb,nemb))
+    corrpot = numpy.zeros((nemb,nemb))
     mo_coeff = numpy.zeros((norb,norb))
-    npair = norb*(norb+1)/2
-    eri = numpy.zeros(npair*(npair+1)/2)
+    embasis = numpy.zeros((norb,nemb))
+    eri = numpy.zeros((npair*(npair+1)/2))
     dat = finp.readline().split()
     while dat:
-        i, j, k, l = map(int, dat[2:])
-        val = map(float, dat[:2])
-        if abs(val[1]) > 1e-12:
-            print i,j,k,l
-        assert(abs(val[1]) < 1e-12)
-        if l == -1:
-            mo_coeff[i-1,j-1] = val[0]
+        i, j, k, l = map(int, dat[1:])
+        if l == 0:
+            h1emb[i-1,j-1] = h1emb[j-1,i-1] = float(dat[0])
+        elif l == -1:
+            mo_coeff[i-1,j-1] = float(dat[0])
+        elif l == -2:
+            embasis[i-1,j-1] = float(dat[0])
+        elif l == 0:
+            corrpot[i-1,j-1] = corrpot[j-1,i-1] = float(dat[0])
         else:
             if i >= j:
                 ij = (i-1)*i/2 + j-1
@@ -253,19 +106,29 @@ def read_clustdump(fcidump):
             else:
                 kl = (l-1)*l/2 + k-1
             if ij >= kl:
-                eri[ij*(ij+1)/2+kl] = val[0]
+                eri[ij*(ij+1)/2+kl] = float(dat[0])
             else:
-                eri[kl*(kl+1)/2+ij] = val[0]
+                eri[kl*(kl+1)/2+ij] = float(dat[0])
         dat = finp.readline().split()
-    dic['MO_COEFF'] = mo_coeff
     dic['ERI'] = eri
-    sys.stdout.write('Finish reading %s\n' % fcidump)
+    dic['MO_COEFF'] = mo_coeff
+    dic['EMBASIS'] = numpy.dot(mo_coeff, embasis)
+    dic['H1EMB'] = h1emb
+    dic['CORRPOT'] = corrpot
     return dic
 
-def read_jkdump(fcidump):
-    sys.stdout.write('Start reading %s\n' % fcidump)
+def read_hfdump(jdump, kdump, fockdump):
+# FOCKDUMP, JDUMP, KDUMP in MO representation
+# FOCKDUMP:
+# Fock matrix (exclude correlation potential)  x x 0 0
+# MO orbital energy  x 0 0 0
+# JDUMP:
+# 2(pq|ii)  x x 0 0
+# KDUMP:
+# -(pi|iq)  x x 0 0
     dic = {}
-    finp = open(fcidump, 'r')
+    sys.stdout.write('Start reading %s\n' % fockdump)
+    finp = open(fockdump, 'r')
     dat = re.split('[=,]', finp.readline())
     while dat[0]:
         if 'FCI' in dat[0].upper():
@@ -281,29 +144,45 @@ def read_jkdump(fcidump):
             break
         dat = re.split('[=,]', finp.readline())
     norb = dic['NORB']
+    fock = numpy.zeros((norb,norb))
     mo_energy = numpy.zeros(norb)
-    vj = numpy.zeros((norb,norb))
-    vk = numpy.zeros((norb,norb))
-    npair = norb*(norb+1)/2
-    eri = numpy.zeros(npair*(npair+1)/2)
     dat = finp.readline().split()
     while dat:
-        i, j, k, l = map(int, dat[2:])
-        val = map(float, dat[:2])
-        if abs(val[1]) > 1e-12:
-            print i,j,k,l
-        assert(abs(val[1]) < 1e-12)
+        i, j = map(int, dat[1:3])
         if j == 0:
-            mo_energy[i-1] = val[0]
-        elif i < 0:
-            vk[-i-1,-j-1] = val[0]
+            mo_energy[i-1] = float(dat[0])
         else:
-            vj[i-1,j-1] = val[0]
+            fock[i-1,j-1] = float(dat[0])
         dat = finp.readline().split()
+
+    sys.stdout.write('Start reading %s\n' % jdump)
+    vj = numpy.zeros((norb,norb))
+    vk = numpy.zeros((norb,norb))
+    finp = open(jdump, 'r')
+    dat = finp.readline()
+    while 'END' not in dat:
+        dat = finp.readline()
+    dat = finp.readline().split()
+    while dat:
+        i, j = map(int, dat[1:3])
+        vj[i-1,j-1] = float(dat[0])
+        dat = finp.readline().split()
+    sys.stdout.write('Start reading %s\n' % kdump)
+    finp = open(kdump, 'r')
+    dat = finp.readline()
+    while 'END' not in dat:
+        dat = finp.readline()
+    dat = finp.readline().split()
+    while dat:
+        i, j = map(int, dat[1:3])
+        vk[i-1,j-1] = float(dat[0])
+        dat = finp.readline().split()
+    finp.close()
+
     dic['MO_ENERGY'] = mo_energy
+    dic['HCORE'] = fock-(vj+vk)
     dic['J'] = vj
     dic['K'] = vk
-    sys.stdout.write('Finish reading %s\n' % fcidump)
     return dic
 
 

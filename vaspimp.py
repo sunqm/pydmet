@@ -10,33 +10,93 @@ from pyscf import gto
 from pyscf import scf
 import dmet_hf
 
+# NOTE:
+# * When reading vasp FOCKDUMP, the fock matrix has EXCLUDED the correlation
+#   potential.  It's not completely diagonalized
+
 # AO basis of entire system are orthogonal sets
+
 class OneImp(dmet_hf.RHF):
-    def __init__(self, entire_scf, basidx=[], orth_ao=None):
-        dmet_hf.RHF.__init__(self, entire_scf)
-        self.bas_on_frag = basidx
+    def __init__(self, entire_scf):
+        dmet_hf.RHF.__init__(self, entire_scf,
+                             numpy.eye(entire_scf._vaspdump['NORB']))
+        self.bas_on_frag = entire_scf._vaspdump['ORBIND']
+        self.conv_threshold = 1e-8
+        assert(self.entire_scf._vaspdump['NIMP'] == len(self.bas_on_frag))
 
     def build_(self, mol=None):
         effscf = self.entire_scf
         self._eri = self.eri_on_impbas(mol)
-        c_inv = numpy.dot(self.orth_coeff.T, self.entire_scf.get_ovlp(mol))
-        mo_orth = numpy.dot(c_inv, effscf.mo_coeff[:,effscf.mo_occ>1e-15])
+        mo_orth = effscf.mo_coeff[:,effscf.mo_occ>1e-15]
         self.imp_site, self.bath_orb, self.env_orb = \
-                dmet_hf.decompose_orbital(self, mo_orth, self.bas_on_frag)
-        self.impbas_coeff = self.cons_impurity_basis()
+                dmet_hf.decompose_orbital(self, mo_orth, self.bas_on_frag,
+                                          gen_imp_site=True)
+        self.impbas_coeff = self.entire_scf._vaspdump['EMBASIS']
+        assert(abs(self.impbas_coeff).sum() > 1e-10) # ensure embasis has been read
+        log.debug(self, 'det(<impbas_coeff|readin embasis>) = %.12g',
+                  numpy.linalg.det(numpy.dot(self.impbas_coeff.T,
+                                             self.cons_impurity_basis())))
 
         self.nelectron = int(effscf.mo_occ.sum()) - self.env_orb.shape[1] * 2
         log.info(self, 'number of electrons for impurity  = %d', \
                  self.nelectron)
-        self.energy_by_env, self._vhf_env = \
-                self.init_vhf_env(self.env_orb)
+        self.energy_by_env, self._vhf_env = self.init_vhf_env(self.env_orb)
 
-    def get_orth_ao(self, mol):
-        s = self.entire_scf.get_ovlp(mol)
-        if abs(s-numpy.eye(s.shape[0])).sum() < 1e-12:
-            return numpy.eye(self.entire_scf.mo_energy.size)
+    def init_vhf_env(self, env_orb):
+        nemb = self.impbas_coeff.shape[1]
+        c = numpy.dot(self.impbas_coeff.T, self.entire_scf.mo_coeff)
+# the correlation potential has been added to H1EMB. in vhf, it will cancel
+# out the correlation potential in self.entire_scf.mo_energy.
+        vhf = numpy.dot(c*self.entire_scf.mo_energy, c.T) \
+                - self.entire_scf._vaspdump['H1EMB']
+#               == self.mat_ao2impbas(self.entire_scf._vaspdump['J']+self.entire_scf._vaspdump['K'])
+
+        mocc = c[:,self.entire_scf.mo_occ>0]
+        dmemb = numpy.dot(mocc, mocc.T)*2
+        vemb = self.get_veff(self.mol, dmemb)
+        return 0, vhf - vemb
+
+    def make_init_guess(self, mol):
+        log.debug(self, 'init guess based on entire MO coefficients')
+        eff_scf = self.entire_scf
+        c = numpy.dot(self.impbas_coeff.T, eff_scf.mo_coeff)
+        dm = eff_scf.make_rdm1(c, eff_scf.mo_occ)
+        hf_energy = 0
+        return hf_energy, dm
+
+    def get_hcore(self, mol=None):
+# This one explicitly excluded the correlation potential
+        return self.mat_ao2impbas(self.entire_scf.get_hcore(mol)) + self._vhf_env
+
+    def get_ovlp(self, mol=None):
+        return numpy.eye(self.entire_scf._vaspdump['NEMB'])
+
+    def eri_on_impbas(self, mol):
+        return ao2mo.restore(8, self.entire_scf._vaspdump['ERI'],
+                             self.entire_scf._vaspdump['NEMB'])
+
+    def imp_scf(self):
+        self.orth_coeff = self.get_orth_ao(self.mol)
+        self.dump_flags()
+        self.build_(self.mol)
+        self.scf_conv, self.hf_energy, self.mo_energy, self.mo_occ, \
+                self.mo_coeff_on_imp \
+                = scf.hf.scf_cycle(self.mol, self, self.conv_threshold, \
+                                   dump_chk=False)
+        self.mo_coeff = numpy.dot(self.impbas_coeff, self.mo_coeff_on_imp)
+        if self.scf_conv:
+            log.log(self, 'converged impurity sys electronic energy = %.15g', \
+                    self.hf_energy)
         else:
-            return dmet_hf.RHF.get_orth_ao(self, mol)
+            log.log(self, 'SCF not converge.')
+            log.log(self, 'electronic energy = %.15g after %d cycles.', \
+                    self.hf_energy, self.max_cycle)
+
+        dm = self.make_rdm1(self.mo_coeff_on_imp, self.mo_occ)
+        vhf = self.get_veff(self.mol, dm)
+        self.hf_energy, self.e_frag, self.nelec_frag = \
+                self.calc_frag_elec_energy(self.mol, vhf, dm)
+        return self.hf_energy
 
 
 ##########################################################################
@@ -76,217 +136,18 @@ class OneImpNI(OneImpNaiveNI):
 
 ##########################################################################
 
-class OneImpOnCLUSTDUMP(OneImp):
-    def __init__(self, entire_scf, vasphf):
-        self._vasphf = vasphf
-        dmet_hf.RHF.__init__(self, entire_scf, numpy.eye(vasphf['NORB']))
-        self.bas_on_frag = self._vasphf['ORBIND']
-        assert(self._vasphf['NIMP'] == len(self.bas_on_frag))
-        self._eri = vasphf['ERI']
-
-    def build_(self, mol=None):
-        effscf = self.entire_scf
-        self._eri = self.eri_on_impbas(mol)
-        mo_orth = effscf.mo_coeff[:,effscf.mo_occ>1e-15]
-#        self.imp_site, self.bath_orb, self.env_orb = \
-#                dmet_hf.decompose_orbital(self, mo_orth, self.bas_on_frag)
-        self.imp_site, self.bath_orb, self.env_orb = \
-                dmet_hf.decompose_orbital(self, mo_orth, self.bas_on_frag,
-                                          gen_imp_site=True)
-        #self.impbas_coeff = self.cons_impurity_basis()
-        self.impbas_coeff = self._vasphf['EMBASIS']
-        assert(abs(self.impbas_coeff).sum() > 1e-10)
-        #print abs(abs(self.cons_impurity_basis()) - abs(self._vasphf['EMBASIS'])).sum()
-        #assert(0)
-        #log.debug(self, 'diff of impbas_coeff to readin embasis %.8g',
-        #          abs(abs(self.impbas_coeff) - abs(self._vasphf['EMBASIS'])).sum())
-
-        self.nelectron = int(effscf.mo_occ.sum()) - self.env_orb.shape[1] * 2
-        log.info(self, 'number of electrons for impurity  = %d', \
-                 self.nelectron)
-        self.energy_by_env, self._vhf_env = self.init_vhf_env(self.env_orb)
-
-    def init_vhf_env(self, env_orb):
-        nemb = self._vasphf['NEMB']
-        c = numpy.dot(self.impbas_coeff.T, self._vasphf['MO_COEFF'])
-#        vhf = numpy.dot(c*self._vasphf['MO_ENERGY'], c.T) \
-#                - self._vasphf['H1EMB']
-        vhf = self.mat_ao2impbas(self._vasphf['J']+self._vasphf['K'])
-
-        mocc = c[:,:self._vasphf['NELEC']/2]
-        dmemb = numpy.dot(mocc, mocc.T)*2
-        vemb = self.get_veff(self.mol, dmemb)
-        return 0, vhf - vemb
-
-    def make_init_guess(self, mol):
-        log.debug(self, 'init guess based on entire MO coefficients')
-        eff_scf = self.entire_scf
-        c = numpy.dot(self.impbas_coeff.T, eff_scf.mo_coeff)
-        dm = eff_scf.make_rdm1(c, eff_scf.mo_occ)
-        hf_energy = 0
-        return hf_energy, dm
-
-    def get_hcore(self, mol=None):
-        return self._vasphf['H1EMB'] + self._vhf_env
-
-    def get_ovlp(self, mol=None):
-        return numpy.eye(self._vasphf['NEMB'])
-
-    def eri_on_impbas(self, mol):
-        return ao2mo.restore(8, self._vasphf['ERI'], self._vasphf['NEMB'])
-
-    def imp_scf(self):
-        self.orth_coeff = self.get_orth_ao(self.mol)
-        self.dump_flags()
-        self.build_(self.mol)
-        self.scf_conv, self.hf_energy, self.mo_energy, self.mo_occ, \
-                self.mo_coeff_on_imp \
-                = scf.hf.scf_cycle(self.mol, self, self.conv_threshold, \
-                                   dump_chk=False)
-        self.mo_coeff = numpy.dot(self.impbas_coeff, self.mo_coeff_on_imp)
-        if self.scf_conv:
-            log.log(self, 'converged impurity sys electronic energy = %.15g', \
-                    self.hf_energy)
-        else:
-            log.log(self, 'SCF not converge.')
-            log.log(self, 'electronic energy = %.15g after %d cycles.', \
-                    self.hf_energy, self.max_cycle)
-
-        dm = self.make_rdm1(self.mo_coeff_on_imp, self.mo_occ)
-        vhf = self.get_veff(self.mol, dm)
-        self.hf_energy, self.e_frag, self.n_elec_frag = \
-                self.calc_frag_elec_energy(self.mol, vhf, dm)
-        return self.hf_energy
-
-def read_clustdump(fcidump, jdump, kdump, fockdump):
-    dic = {}
-    finp = open(jdump, 'r')
-    dat = re.split('[=,]', finp.readline())
-    while dat[0]:
-        if 'FCI' in dat[0].upper():
-            dic['NORB'] = int(dat[1])
-            dic['NELEC'] = int(dat[3])
-            dic['MS2'] = int(dat[5])
-        elif 'END' in dat[0].upper():
-            break
-        dat = re.split('[=,]', finp.readline())
-    norb = dic['NORB']
-    vj = numpy.zeros((norb,norb))
-    dat = finp.readline().split()
-    while dat:
-        i, j = map(int, dat[1:3])
-        vj[i-1,j-1] = float(dat[0])
-        dat = finp.readline().split()
-
-    finp = open(kdump, 'r')
-    dat = finp.readline()
-    while dat:
-        if 'END' in dat:
-            break
-        dat = finp.readline()
-    vk = numpy.zeros((norb,norb))
-    dat = finp.readline().split()
-    while dat:
-        i, j = map(int, dat[1:3])
-        vk[i-1,j-1] = float(dat[0])
-        dat = finp.readline().split()
-
-    finp = open(fockdump, 'r')
-    dat = finp.readline()
-    while dat:
-        if 'END' in dat:
-            break
-        dat = finp.readline()
-    fock = numpy.zeros((norb,norb))
-    mo_energy = numpy.zeros(norb)
-    dat = finp.readline().split()
-    while dat:
-        i, j = map(int, dat[1:3])
-        if j == 0:
-            mo_energy[i-1] = float(dat[0])
-        else:
-            fock[i-1,j-1] = float(dat[0])
-        dat = finp.readline().split()
-    dic['MO_ENERGY'] = mo_energy
-
-    finp = open(fcidump, 'r')
-    dat = re.split('[=,]', finp.readline())
-    while dat[0]:
-        if 'FCI' in dat[0].upper():
-            dic['NEMB'] = int(dat[1])
-            dic['NIMP'] = int(dat[3])
-            dic['NBATH'] = int(dat[5])
-        elif 'ORBIND' in dat[0].upper():
-            dat = re.split('[=,]', finp.readline())
-            dic['ORBIND'] = map(lambda x: int(x)-1, dat[:dic['NIMP']])
-        elif 'END' in dat[0].upper():
-            break
-        dat = re.split('[=,]', finp.readline())
-    nemb = dic['NEMB']
-    npair = nemb*(nemb+1)/2
-    h1emb = numpy.zeros((nemb,nemb))
-    mo_coeff = numpy.zeros((norb,norb))
-    embasis = numpy.zeros((norb,nemb))
-    eri = numpy.zeros((npair,npair))
-    dat = finp.readline().split()
-    while dat:
-        i, j, k, l = map(int, dat[1:])
-        if k == 0 and l == 0:
-            h1emb[i-1,j-1] = h1emb[j-1,i-1] = float(dat[0])
-        elif l == -1:
-            mo_coeff[i-1,j-1] = float(dat[0])
-        elif l == -2:
-            embasis[i-1,j-1] = float(dat[0])
-        else:
-            if i >= j:
-                ij = (i-1)*i/2 + j-1
-            else:
-                ij = (j-1)*j/2 + i-1
-            if k >= l:
-                kl = (k-1)*k/2 + l-1
-            else:
-                kl = (l-1)*l/2 + k-1
-            eri[ij,kl] = eri[kl,ij] = float(dat[0])
-        dat = finp.readline().split()
-    dic['MO_COEFF'] = mo_coeff
-    dic['FOCK'] = reduce(numpy.dot, (mo_coeff, fock, mo_coeff.T))
-    dic['J'] = reduce(numpy.dot, (mo_coeff, vj, mo_coeff.T))
-    dic['K'] = reduce(numpy.dot, (mo_coeff, vk, mo_coeff.T))
-    dic['EMBASIS'] = numpy.dot(mo_coeff, embasis)
-    dic['H1EMB'] = h1emb
-    dic['ERI'] = eri
-    return dic
-
-def fake_entire_scf(vasphf):
-    mol = gto.Mole()
-    mol.verbose = 0
-    mol.build(False, False)
-    mol.nelectron = vasphf['NELEC']
-    fake_hf = scf.hf.RHF(mol)
-    norb = vasphf['NORB']
-    hcore = vasphf['FOCK'] - (vasphf['J']+vasphf['K'])
-    fake_hf.get_hcore = lambda *args: hcore
-    fake_hf.get_ovlp = lambda *args: numpy.eye(norb)
-    def stop(*args):
-        raise RuntimeError('fake_hf')
-    fake_hf.get_veff = stop
-    fake_hf.mo_coeff = vasphf['MO_COEFF']
-    fake_hf.mo_energy = vasphf['MO_ENERGY']
-    fake_hf.mo_occ = numpy.zeros(norb)
-    fake_hf.mo_occ[:vasphf['NELEC']/2] = 2
-    return fake_hf
 
 
 
-if __name__ == '__main__':
-    dic = read_clustdump('FCIDUMP.CLUST.GTO', 'JDUMP','KDUMP','FOCKDUMP')
-#    hcore = dic['FOCK'] - (dic['J'] - .5*dic['K'])
-#    nimp = dic['NIMP']
-#    print abs(hcore[:nimp,:nimp] - dic['H1EMB'][:nimp,:nimp]).sum()
-#    ee = reduce(numpy.dot, (dic['MO_COEFF'].T, dic['FOCK'], dic['MO_COEFF']))
-#    print abs(ee - numpy.diag(dic['MO_ENERGY'])).sum()
-    fake_hf = fake_entire_scf(dic)
-    emb = OneImpOnCLUSTDUMP(fake_hf, dic)
-    emb.verbose = 5
-    emb.imp_scf()
-
+#FIXMEif __name__ == '__main__':
+#FIXME    dic = read_clustdump('FCIDUMP.CLUST.GTO', 'JDUMP','KDUMP','FOCKDUMP')
+#FIXME#    hcore = dic['FOCK'] - (dic['J'] - .5*dic['K'])
+#FIXME#    nimp = dic['NIMP']
+#FIXME#    print abs(hcore[:nimp,:nimp] - dic['H1EMB'][:nimp,:nimp]).sum()
+#FIXME#    ee = reduce(numpy.dot, (dic['MO_COEFF'].T, dic['FOCK'], dic['MO_COEFF']))
+#FIXME#    print abs(ee - numpy.diag(dic['MO_ENERGY'])).sum()
+#FIXME    fake_hf = fake_entire_scf(dic)
+#FIXME    emb = OneImpOnCLUSTDUMP(fake_hf, dic)
+#FIXME    emb.verbose = 5
+#FIXME    emb.imp_scf()
+#FIXME
