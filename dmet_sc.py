@@ -286,15 +286,19 @@ class EmbSys(object):
                 else:
                     emb.vfit_mf = v_mf_group[m]
 
-#?        # should we add mean-field potentail on the impurity solver?
-#?        for m, emb in enumerate(embs):
-#?            if self.env_pot_for_ci == NO_ENV_POT:
-#?                pass
-#?            elif self.env_pot_for_ci == NO_IMP_BLK:
-#?                nimp = len(emb.bas_on_frag)
-#?                vmf = emb.mat_ao2impbas(vglobal)
-#?                vmf[:nimp,:nimp] = 0
-#?                emb.vfit_ci += vmf
+        # should we add mean-field potentail on the impurity solver?
+        if self.env_pot_for_ci != NO_ENV_POT:
+            if self.with_hopping:
+                v_add = self.assemble_to_fullmat(v_mf_group)
+            else:
+                v_add = self.assemble_to_blockmat(v_mf_group)
+            v_add_ao = self.mat_orthao2ao(v_add)
+            for m, emb in enumerate(embs):
+                if self.env_pot_for_ci == NO_IMP_BLK:
+                    nimp = len(emb.bas_on_frag)
+                    vmf = emb.mat_ao2impbas(v_add_ao)
+                    vmf[:nimp,:nimp] = emb.vfit_ci[:nimp,:nimp]
+                    emb.vfit_ci = vmf
         return embs
 
 
@@ -444,10 +448,11 @@ class EmbSys(object):
         nao = self.orth_coeff.shape[1]
         v_add = numpy.zeros((nao,nao))
         for m, atm_lst, bas_idx in self.all_frags:
-            nimp = bas_idx.__len__()
-            vfrag = v_group[m][:nimp,:nimp]
-            for i, j in enumerate(bas_idx):
-                v_add[j,bas_idx] = vfrag[i,:]
+            if isinstance(v_group[m], numpy.ndarray):
+                nimp = bas_idx.__len__()
+                vfrag = v_group[m][:nimp,:nimp]
+                for i, j in enumerate(bas_idx):
+                    v_add[j,bas_idx] = vfrag[i,:]
         return v_add
 
     def assemble_to_fullmat(self, dm_group):
@@ -455,11 +460,12 @@ class EmbSys(object):
         nao = self.orth_coeff.shape[1]
         dm_big = numpy.zeros((nao,nao))
         for m, atm_lst, bas_idx in self.all_frags:
-            emb = self.embs[m]
-            nimp = len(emb.bas_on_frag)
-            dm_ab = numpy.dot(dm_group[m][:nimp,nimp:], emb.bath_orb.T)
-            dm_ab[:,emb.bas_on_frag] = dm_group[m][:nimp,:nimp]
-            dm_big[emb.bas_on_frag] = dm_ab
+            if isinstance(dm_group[m], numpy.ndarray):
+                emb = self.embs[m]
+                nimp = len(emb.bas_on_frag)
+                dm_ab = numpy.dot(dm_group[m][:nimp,nimp:], emb.bath_orb.T)
+                dm_ab[:,emb.bas_on_frag] = dm_group[m][:nimp,:nimp]
+                dm_big[emb.bas_on_frag] = dm_ab
         return dm_big
 
     def dump_frag_prop_mat(self, mol, frag_mat_group):
@@ -630,7 +636,8 @@ def fit_chemical_potential(mol, emb, embsys):
 
 # change chemical potential to get correct number of electrons
     def nelec_diff(v):
-        vmat = numpy.eye(nimp) * v
+        vmat = emb.vfit_ci.copy()
+        vmat[:nimp,:nimp] = numpy.eye(nimp) * v
         _, _, dm = embsys.solver.run(emb, emb._eri, vmat, True, False)
         #print 'ddm ',nelec_frag,dm[:nimp].trace(), nelec_frag - dm[:nimp].trace()
         return nelec_frag - dm[:nimp].trace()
@@ -639,7 +646,7 @@ def fit_chemical_potential(mol, emb, embsys):
     sol = scipy.optimize.root(nelec_diff, chem_pot0, tol=1e-3, \
                               method='lm', options={'ftol':1e-3, 'maxiter':4})
     nemb = emb.impbas_coeff.shape[1]
-    vmat = numpy.zeros((nemb,nemb))
+    vmat = emb.vfit_ci.copy()
     for i in range(nimp):
         vmat[i,i] = sol.x
     log.debug(embsys, 'scipy.optimize summary %s', sol)

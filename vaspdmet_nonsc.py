@@ -53,7 +53,8 @@ class EmbSysPeriod(dmet_nonsc.EmbSys):
         fock0 = numpy.dot(sc*eff_scf.mo_energy, sc.T.conj())
         emb._project_fock = emb.mat_ao2impbas(fock0)
         nimp = len(emb.bas_on_frag)
-        emb._pure_hcore = emb.get_hcore() # exclude correlation potential
+        emb._pure_hcore = emb.get_hcore() \
+                - emb._vhf_env # exclude HF[core] and correlation potential
         cimp = numpy.dot(emb.impbas_coeff[:,:nimp].T,
                          eff_scf.mo_coeff[:,eff_scf.mo_occ>0])
         emb._project_nelec_frag = numpy.linalg.norm(cimp)**2*2

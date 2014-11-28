@@ -74,13 +74,32 @@ class EmbSysPeriod(dmet_sc.EmbSys):
             emb.hf_energy = 0
             nimp = emb.imp_site.shape[1]
             cimp = numpy.dot(emb.impbas_coeff[:,:nimp].T, sc[:,:nocc])
-            emb._pure_hcore = emb.get_hcore() # exclude correlation potential
+            emb._pure_hcore = emb.get_hcore() \
+                    - emb._vhf_env # exclude HF[core] and correlation potential
 #TODO store the correlation potential on bath
             emb._project_nelec_frag = numpy.linalg.norm(cimp)**2*2
             #emb.imp_scf()
 
         log.debug(self, 'CPU time for set up embsys.embs: %.8g sec', \
                   time.clock()-t0)
+
+# add the CorrPot on bath for CI solver
+        if self.env_pot_for_ci != NO_ENV_POT:
+            for m, emb in enumerate(embs):
+                nimp = len(emb.bas_on_frag)
+                vmf = self.entire_scf._vaspdump['CORRPOT'].copy()
+                vmf[:nimp,:nimp] = emb.vfit_ci[:nimp,:nimp]
+                emb.vfit_ci = vmf
+        return embs
+
+    def update_embs_vfit_mf(self, mol, embs, v_mf_group):
+        for m, emb in enumerate(embs):
+            if v_mf_group[m] is not 0:
+                if v_mf_group[m].shape[0] < emb._vhf_env.shape[0]:
+                    nd = v_mf_group[m].shape[0]
+                    emb.vfit_mf[:nd,:nd] = v_mf_group[m]
+                else:
+                    emb.vfit_mf = v_mf_group[m]
         return embs
 
 

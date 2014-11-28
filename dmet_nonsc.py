@@ -83,20 +83,21 @@ class EmbSys(dmet_sc.EmbSys):
         log.log(self, 'e_frag = %.11g, nelec_frag = %.11g', e_frag, nelec_frag)
         return e_tot
 
-
-    def extract_frag_energy(self, emb, dm1, e2frag):
-        nimp = len(emb.bas_on_frag)
-        vhf = emb._project_fock - emb._pure_hcore
-        e1 = numpy.dot(dm1[:nimp].reshape(-1),
-                       (emb._pure_hcore + .5 * vhf)[:nimp].reshape(-1))
-        dmf = emb.make_rdm1(emb.mo_coeff_on_imp, emb.mo_occ)
-        vhf = emb.get_veff(emb.mol, dmf)
-        e2 = e2frag - .5*numpy.dot(dm1[:nimp].reshape(-1),
-                                   vhf[:nimp].reshape(-1))
-        e_frag = e1 + e2
-        n_frag = dm1[:nimp].trace()
-        log.debug(self, 'e_frag = %.11g, nelec_frag = %.11g', e_frag, n_frag)
-        return e_frag, n_frag
+# emb._project_fock - emb._pure_hcore will include the fitting potential into
+# the final energy expression.  Is it right?
+#    def extract_frag_energy(self, emb, dm1, e2frag):
+#        nimp = len(emb.bas_on_frag)
+#        vhf = emb._project_fock - emb._pure_hcore
+#        e1 = numpy.dot(dm1[:nimp].reshape(-1),
+#                       (emb._pure_hcore + .5 * vhf)[:nimp].reshape(-1))
+#        dmf = emb.make_rdm1(emb.mo_coeff_on_imp, emb.mo_occ)
+#        vhf = emb.get_veff(emb.mol, dmf)
+#        e2 = e2frag - .5*numpy.dot(dm1[:nimp].reshape(-1),
+#                                   vhf[:nimp].reshape(-1))
+#        e_frag = e1 + e2
+#        n_frag = dm1[:nimp].trace()
+#        log.debug(self, 'e_frag = %.11g, nelec_frag = %.11g', e_frag, n_frag)
+#        return e_frag, n_frag
 
 
 def fit_imp_fix_nelec(mol, emb, embsys):
