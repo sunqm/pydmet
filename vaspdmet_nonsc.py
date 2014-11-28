@@ -3,51 +3,67 @@
 import numpy
 import scipy
 import scipy.optimize
+from pyscf import gto
 from pyscf import lib
 from pyscf import ao2mo
 import pyscf.lib.logger as log
 import pyscf.lib.parameters as param
 import impsolver
 import vaspimp
+import vasphf
 import dmet_nonsc
 from dmet_nonsc import *
 
 # Using VASP HF results
 
 class EmbSysPeriod(dmet_nonsc.EmbSys):
-    def __init__(self, fcidump, jdump, kdump, fockdump, init_v=None):
-        self._vasphf = vaspimp.read_clustdump(fcidump, jdump, kdump, fockdump)
-        fake_hf = vaspimp.fake_entire_scf(self._vasphf)
-        dmet_nonsc.EmbSys.__init__(self, fake_hf.mol, fake_hf, init_v=None)
-        self.orth_coeff = numpy.eye(self._vasphf['NORB'])
-        #self.OneImp = lambda mf: vaspimp.OneImpOnCLUSTDUMP(mf, vasphf)
+    def __init__(self, clustdump, jdump, kdump, fockdump, init_v=None):
+        self.clustdump= clustdump
+        self.jdump    = jdump
+        self.kdump    = kdump
+        self.fockdump = fockdump
+        self.vasp_inpfile_pass2 = ''
+
+        mol = gto.Mole()
+        mol.verbose = 5
+        mol.build(False, False)
+        fake_hf = vasphf.RHF(mol, clustdump, jdump, kdump, fockdump)
+        dmet_nonsc.EmbSys.__init__(self, mol, fake_hf, init_v=None)
+
+        self.orth_coeff = numpy.eye(fake_hf.mo_coeff.shape[1])
+        self.OneImp = vaspimp.OneImp
         self.solver = impsolver.Psi4CCSD()
+        self.nbands = 1
+        self.pwcut = 100
+        self.cutri = 100
         self.verbose = 5
         self.emb_verbose = 5
         self.pot_on = 'IMP'  # or 'BATH', or 'IMP,BATH'
 
     def init_embsys(self, mol):
+        eff_scf = self.entire_scf
         #embs = self.init_embs(mol, self.entire_scf, self.orth_coeff)
-        emb = vaspimp.OneImpOnCLUSTDUMP(self.entire_scf, self._vasphf)
+        emb = self.OneImp(eff_scf)
         emb.occ_env_cutoff = 1e-14
         emb.orth_coeff = self.orth_coeff
         emb.verbose = self.emb_verbose
         emb.imp_scf()
         embs = [emb]
-        emb._project_fock = emb.mat_ao2impbas(self._vasphf['FOCK'])
-        mo = self._vasphf['MO_COEFF']
-        nimp = self._vasphf['NIMP']
-        emb._pure_hcore = self._vasphf['H1EMB'].copy()
+        sc = numpy.dot(eff_scf.get_ovlp(mol), eff_scf.mo_coeff)
+        fock0 = numpy.dot(sc*eff_scf.mo_energy, sc.T.conj())
+        emb._project_fock = emb.mat_ao2impbas(fock0)
+        nimp = len(emb.bas_on_frag)
+        emb._pure_hcore = emb.get_hcore() # exclude correlation potential
         cimp = numpy.dot(emb.impbas_coeff[:,:nimp].T,
-                         mo[:,:self._vasphf['NELEC']/2])
+                         eff_scf.mo_coeff[:,eff_scf.mo_occ>0])
         emb._project_nelec_frag = numpy.linalg.norm(cimp)**2*2
         log.debug(emb, 'nelec of imp from lattice HF %.8g',
                   emb._project_nelec_frag)
         log.debug(emb, 'nelec of imp from embedding HF %.8g',
                   numpy.linalg.norm(emb.mo_coeff_on_imp[:nimp,:emb.nelectron/2])**2*2)
 #X        embs = self.update_embs(mol, embs, self.entire_scf, self.orth_coeff)
-        emb.vfit_mf = numpy.zeros_like(self._vasphf['H1EMB'])
-        emb.vfit_ci = numpy.zeros_like(self._vasphf['H1EMB'])
+        emb.vfit_mf = numpy.zeros_like(emb._pure_hcore)
+        emb.vfit_ci = numpy.zeros_like(emb._pure_hcore)
         embs = self.update_embs_vfit_ci(mol, embs, [0])
 #X        embs = self.update_embs_vfit_mf(mol, embs, [0])
         self.embs = embs
