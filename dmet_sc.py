@@ -514,7 +514,7 @@ class EmbSys(object):
             for c in numpy.array(v_add):
                 mol.stdout.write(fmt % tuple(c))
 
-        if self.verbose >= param.VERBOSE_DEBUG2:
+        if self.verbose >= log.DEBUG2:
             log.debug(self, '** mo_coeff of MF sys (on orthogonal AO) **')
             c = numpy.dot(numpy.linalg.inv(self.orth_coeff), \
                           self.entire_scf.mo_coeff)
