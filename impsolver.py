@@ -129,7 +129,7 @@ def fci(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
 
     norb = h1e.shape[1]
     cis = pyscf.fci.solver(mol)
-    cis.verbose = 0
+    cis.verbose = 5
     eci, c = cis.kernel(h1e, eri1, norb, nelec)
     if with_1pdm:
         dm1 = cis.make_rdm1(c, norb, nelec)

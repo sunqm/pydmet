@@ -94,7 +94,7 @@ def read_clustdump(clustdump, hfdic):
             mo_coeff[i-1,j-1] = float(dat[0])
         elif l == -2:
             embasis[i-1,j-1] = float(dat[0])
-        elif l == 0:
+        elif l == -3:
             corrpot[i-1,j-1] = corrpot[j-1,i-1] = float(dat[0])
         else:
             if i >= j:
