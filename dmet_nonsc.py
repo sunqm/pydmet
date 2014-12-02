@@ -195,7 +195,7 @@ def fit_chempot(mol, emb, embsys, diff_nelec):
     chem_pot0 = emb.vfit_ci[0,0]
     try:
         sol = scipy.optimize.root(diff_nelec, chem_pot0, tol=1e-3, method='lm',
-                                  options={'ftol':1e-3, 'maxiter':10})
+                                  options={'ftol':1e-3, 'maxiter':12})
         log.debug(embsys, 'scipy.optimize summary %s', sol)
         log.debug(embsys, 'chem potential = %.11g, nelec error = %.11g', \
                   sol.x, sol.fun)

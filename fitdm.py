@@ -638,7 +638,7 @@ def fit_solver(dev, fock0, nocc, nimp, dm_ref_alpha, \
             x = scipy.optimize.minimize(fitp.norm_ddm, fitp.init_guess(), \
                                         method='SLSQP', jac=grad, tol=1e-8, \
                                         constraints=cons, \
-                                        options={'maxiter':6,'disp':0}).x
+                                        options={'maxiter':12,'disp':0}).x
     else:
 # Linear Constraint methods cannot ensure the diagonal DM completely match
 # diagonal dm_ref. Maybe diagonal DM is not really linear constraint
@@ -671,7 +671,7 @@ def fit_solver(dev, fock0, nocc, nimp, dm_ref_alpha, \
             x = scipy.optimize.minimize(fitp.norm_ddm, fitp.init_guess(), \
                                         method='SLSQP', jac=grad, tol=1e-8, \
                                         constraints=cons, \
-                                        options={'maxiter':6,'disp':0}).x
+                                        options={'maxiter':12,'disp':0}).x
     vfit = v_V.decompress(x)
 
     e, c = numpy.linalg.eigh(fock0+vfit)

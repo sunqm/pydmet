@@ -4,6 +4,7 @@ import subprocess
 import numpy
 import scipy
 import scipy.optimize
+import scipy.linalg
 from pyscf import lib
 from pyscf import gto
 from pyscf import ao2mo
@@ -67,7 +68,7 @@ class EmbSysPeriod(dmet_sc.EmbSys):
             emb.build_()
 
             emb._project_fock = emb.mat_ao2impbas(fock0)
-            emb.mo_energy, emb.mo_coeff_on_imp = numpy.linalg.eigh(emb._project_fock)
+            emb.mo_energy, emb.mo_coeff_on_imp = scipy.linalg.eigh(emb._project_fock)
             emb.mo_coeff = numpy.dot(emb.impbas_coeff, emb.mo_coeff_on_imp)
             emb.mo_occ = numpy.zeros_like(emb.mo_energy)
             emb.mo_occ[:emb.nelectron/2] = 2
@@ -79,6 +80,14 @@ class EmbSysPeriod(dmet_sc.EmbSys):
 #TODO store the correlation potential on bath
             emb._project_nelec_frag = numpy.linalg.norm(cimp)**2*2
             #emb.imp_scf()
+
+            dm = emb.make_rdm1(emb.mo_coeff_on_imp, emb.mo_occ)
+            vhf = emb.get_veff(mol, dm)
+            nelec_frag = dm[:nimp].trace()
+            efrag = (dm[:nimp]*(emb._pure_hcore)[:nimp]).sum() \
+                  + (dm[:nimp]*(vhf+emb._vhf_env)[:nimp]).sum() * .5
+            log.info(self, 'HF-in-HF, fragment electronic energy = %.15g, nelec = %.9g',
+                     efrag, nelec_frag)
 
         log.debug(self, 'CPU time for set up embsys.embs: %.8g sec', \
                   time.clock()-t0)

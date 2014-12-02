@@ -3,6 +3,7 @@
 import time
 import pickle
 import numpy
+import scipy.linalg
 import copy
 
 from pyscf import scf
@@ -232,7 +233,7 @@ class EmbSys(object):
 # energies, local-SCF is required.
 # * the relevant embedding-SCF lies in self.update_embs_vfit_ci
             emb._project_fock = emb.mat_ao2impbas(fock0)
-            emb.mo_energy, emb.mo_coeff_on_imp = numpy.linalg.eigh(emb._project_fock)
+            emb.mo_energy, emb.mo_coeff_on_imp = scipy.linalg.eigh(emb._project_fock)
             emb.mo_coeff = numpy.dot(emb.impbas_coeff, emb.mo_coeff_on_imp)
             emb.mo_occ = numpy.zeros_like(emb.mo_energy)
             emb.mo_occ[:emb.nelectron/2] = 2
@@ -242,6 +243,13 @@ class EmbSys(object):
             emb._pure_hcore = emb.mat_ao2impbas(hcore)
             emb._project_nelec_frag = numpy.linalg.norm(cimp)**2*2
 
+            dm = emb.make_rdm1(emb.mo_coeff_on_imp, emb.mo_occ)
+            vhf = emb.get_veff(mol, dm)
+            nelec_frag = dm[:nimp].trace()
+            efrag = (dm[:nimp]*(emb._pure_hcore)[:nimp]).sum() \
+                  + (dm[:nimp]*(vhf+emb._vhf_env)[:nimp]).sum() * .5
+            log.info(self, 'HF-in-HF, fragment electronic energy = %.15g, nelec = %.9g',
+                     efrag, nelec_frag)
         log.debug(self, 'CPU time for set up embsys.embs: %.8g sec', \
                   time.clock()-t0)
         return embs
@@ -644,7 +652,7 @@ def fit_chemical_potential(mol, emb, embsys):
     chem_pot0 = emb.vfit_ci[0,0]
 #OPTIMIZE ME, approximate chemical potential
     sol = scipy.optimize.root(nelec_diff, chem_pot0, tol=1e-3, \
-                              method='lm', options={'ftol':1e-3, 'maxiter':4})
+                              method='lm', options={'ftol':1e-3, 'maxiter':12})
     nemb = emb.impbas_coeff.shape[1]
     vmat = emb.vfit_ci.copy()
     for i in range(nimp):
