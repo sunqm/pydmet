@@ -81,14 +81,6 @@ class EmbSysPeriod(dmet_sc.EmbSys):
             emb._project_nelec_frag = numpy.linalg.norm(cimp)**2*2
             #emb.imp_scf()
 
-            dm = emb.make_rdm1(emb.mo_coeff_on_imp, emb.mo_occ)
-            vhf = emb.get_veff(mol, dm)
-            nelec_frag = dm[:nimp].trace()
-            efrag = (dm[:nimp]*(emb._pure_hcore)[:nimp]).sum() \
-                  + (dm[:nimp]*(vhf+emb._vhf_env)[:nimp]).sum() * .5
-            log.info(self, 'HF-in-HF, fragment electronic energy = %.15g, nelec = %.9g',
-                     efrag, nelec_frag)
-
         log.debug(self, 'CPU time for set up embsys.embs: %.8g sec', \
                   time.clock()-t0)
 

@@ -243,13 +243,6 @@ class EmbSys(object):
             emb._pure_hcore = emb.mat_ao2impbas(hcore)
             emb._project_nelec_frag = numpy.linalg.norm(cimp)**2*2
 
-            dm = emb.make_rdm1(emb.mo_coeff_on_imp, emb.mo_occ)
-            vhf = emb.get_veff(mol, dm)
-            nelec_frag = dm[:nimp].trace()
-            efrag = (dm[:nimp]*(emb._pure_hcore)[:nimp]).sum() \
-                  + (dm[:nimp]*(vhf+emb._vhf_env)[:nimp]).sum() * .5
-            log.info(self, 'HF-in-HF, fragment electronic energy = %.15g, nelec = %.9g',
-                     efrag, nelec_frag)
         log.debug(self, 'CPU time for set up embsys.embs: %.8g sec', \
                   time.clock()-t0)
         return embs
@@ -413,7 +406,16 @@ class EmbSys(object):
                                         with_1pdm=True, with_e2frag=nimp)
                 e_frag, nelec_frag = \
                         self.extract_frag_energy(emb, dm1, e2frag)
-                log.debug(self, 'e_frag = %.12g, nelec_frag = %.12g', \
+
+                hfdm = emb.make_rdm1(emb.mo_coeff_on_imp, emb.mo_occ)
+                vhf = emb.get_veff(mol, hfdm)
+                nelechf = hfdm[:nimp].trace()
+                ehfinhf = (hfdm[:nimp]*(emb._pure_hcore)[:nimp]).sum() \
+                        + (hfdm[:nimp]*(vhf+emb._vhf_env)[:nimp]).sum() * .5
+
+                log.debug(self, 'fragment %3d, HF-in-HF, frag energy = %.12g, nelec = %.9g',
+                          m, ehfinhf, nelechf)
+                log.debug(self, '             FCI-in-HF, frag energy = %.12g, nelec = %.9g', \
                           e_frag, nelec_frag)
             e_tot += e_frag
             nelec += nelec_frag

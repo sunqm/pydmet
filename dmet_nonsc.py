@@ -71,8 +71,17 @@ class EmbSys(dmet_sc.EmbSys):
                                             with_1pdm=True, with_e2frag=nimp)
         e_tot = etot + emb.energy_by_env
         e_frag, nelec_frag = self.extract_frag_energy(emb, dm1, e2frag)
+        hfdm = emb.make_rdm1(emb.mo_coeff_on_imp, emb.mo_occ)
+        vhf = emb.get_veff(mol, hfdm)
+        nelechf = hfdm[:nimp].trace()
+        ehfinhf = (hfdm[:nimp]*(emb._pure_hcore)[:nimp]).sum() \
+                + (hfdm[:nimp]*(vhf+emb._vhf_env)[:nimp]).sum() * .5
         log.info(self, 'after fitting, e_tot = %.11g, e_frag = %.11g, nelec_frag = %.11g',
                  e_tot, e_frag, nelec_frag)
+        log.info(self, '              HF-in-HF, frag energy = %.12g, nelec = %.9g',
+                 ehfinhf, nelechf)
+        log.info(self, '             FCI-in-HF, frag energy = %.12g, nelec = %.9g', \
+                 e_frag, nelec_frag)
 
         log.info(self, '====================')
         if self.verbose >= param.VERBOSE_DEBUG:
