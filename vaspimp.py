@@ -49,7 +49,7 @@ class OneImp(dmet_hf.RHF):
 # out the correlation potential in self.entire_scf.mo_energy.
         vhf = numpy.dot(c*self.entire_scf.mo_energy, c.T) \
                 - self.entire_scf._vaspdump['H1EMB']
-#               == self.mat_ao2impbas(self.entire_scf._vaspdump['J']+self.entire_scf._vaspdump['K'])
+# == vhf = self.mat_ao2impbas(self.entire_scf._vaspdump['J']+self.entire_scf._vaspdump['K'])
 
         mocc = c[:,self.entire_scf.mo_occ>0]
         dmemb = numpy.dot(mocc, mocc.T)*2

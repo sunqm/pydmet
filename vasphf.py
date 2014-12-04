@@ -9,7 +9,7 @@ import sys
 import re
 
 import numpy
-#import scipy.linalg.flapack as lapack
+import scipy.linalg
 from pyscf import gto
 from pyscf import scf
 from pyscf import lib
@@ -121,7 +121,8 @@ def read_hfdump(jdump, kdump, fockdump):
 # FOCKDUMP, JDUMP, KDUMP in MO representation
 # FOCKDUMP:
 # Fock matrix (exclude correlation potential)  x x 0 0
-# MO orbital energy  x 0 0 0
+# diagonal part of Fock matrix  x 0 0 0,  they are not MO orbital energy
+# orbital energy can be obtained by diagonalize FOCKDUMP+CORRPOTDUMP
 # JDUMP:
 # 2(pq|ii)  x x 0 0
 # KDUMP:
@@ -145,15 +146,27 @@ def read_hfdump(jdump, kdump, fockdump):
         dat = re.split('[=,]', finp.readline())
     norb = dic['NORB']
     fock = numpy.zeros((norb,norb))
-    mo_energy = numpy.zeros(norb)
     dat = finp.readline().split()
     while dat:
         i, j = map(int, dat[1:3])
-        if j == 0:
-            mo_energy[i-1] = float(dat[0])
-        else:
+        if j != 0:
             fock[i-1,j-1] = float(dat[0])
         dat = finp.readline().split()
+
+    corrpot = numpy.zeros((norb,norb))
+    try:
+        with open('CORRPOTDUMP', 'r') as finp:
+            sys.stdout.write('Start reading CORRPOTDUMP\n')
+            dat = finp.readline()
+            while 'END' not in dat:
+                dat = finp.readline()
+            dat = finp.readline().split()
+            while dat:
+                i, j = map(int, dat[1:3])
+                corrpot[i-1,j-1] = float(dat[0])
+                dat = finp.readline().split()
+    except:
+        sys.stdout.write('CORRPOTDUMP not found\n')
 
     sys.stdout.write('Start reading %s\n' % jdump)
     vj = numpy.zeros((norb,norb))
@@ -167,6 +180,7 @@ def read_hfdump(jdump, kdump, fockdump):
         i, j = map(int, dat[1:3])
         vj[i-1,j-1] = float(dat[0])
         dat = finp.readline().split()
+
     sys.stdout.write('Start reading %s\n' % kdump)
     finp = open(kdump, 'r')
     dat = finp.readline()
@@ -179,7 +193,7 @@ def read_hfdump(jdump, kdump, fockdump):
         dat = finp.readline().split()
     finp.close()
 
-    dic['MO_ENERGY'] = mo_energy
+    dic['MO_ENERGY'] = scipy.linalg.eigh(fock+corrpot)[0]
     dic['HCORE'] = fock-(vj+vk)
     dic['J'] = vj
     dic['K'] = vk
