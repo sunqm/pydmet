@@ -76,7 +76,7 @@ def read_clustdump(clustdump, hfdic):
             klast = kv
             dic[klast] = []
     for k, v in dic.items():
-        if len(v) == 1:
+        if 'ORBIND' not in dic:
             dic[k] = v[0]
     dic['ORBIND'] = [i-1 for i in dic['ORBIND']]
     dic['NEMB'] = dic['NORB']
