@@ -60,23 +60,27 @@ def read_clustdump(clustdump, hfdic):
     dic = {}
     sys.stdout.write('Start reading %s\n' % clustdump)
     finp = open(clustdump, 'r')
-    dat = re.split('[=,]', finp.readline())
-    while dat[0]:
-        if 'FCI' in dat[0].upper():
+    dat = finp.readline()
+    while dat:
+        dat = dat.upper()
+        if 'FCI' in dat:
+            dat = re.split('[=,]', dat)
             dic['NEMB'] = int(dat[1])
             dic['NIMP'] = int(dat[3])
             dic['NBATH'] = int(dat[5])
-        elif 'UHF' in dat[0].upper():
+        elif 'UHF' in dat:
+            dat = re.split('[=,]', dat)
             if 'TRUE' in dat[1].upper():
                 dic['UHF'] = True
             else:
                 dic['UHF'] = False
-        elif 'ORBIND' in dat[0].upper():
-            idx = map(int, finp.readline().split(',')[:-1])
+        elif 'ORBIND' in dat:
+            dat = dat.split('ISYM')[0]
+            dat = re.split('[=,]', dat)[1:-1]
+            idx = map(int, dat)
             dic['ORBIND'] = [i-1 for i in idx]  # transform to 0-based indices
-        elif 'END' in dat[0].upper():
+        elif 'END' in dat:
             break
-        dat = re.split('[=,]', finp.readline())
     nemb = dic['NEMB']
     norb = hfdic['NORB']
     npair = nemb*(nemb+1)/2
