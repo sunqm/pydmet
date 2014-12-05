@@ -61,26 +61,33 @@ def read_clustdump(clustdump, hfdic):
     sys.stdout.write('Start reading %s\n' % clustdump)
     finp = open(clustdump, 'r')
     dat = finp.readline()
+    head = []
     while dat:
-        dat = dat.upper()
-        if 'FCI' in dat:
-            dat = re.split('[=,]', dat)
-            dic['NEMB'] = int(dat[1])
-            dic['NIMP'] = int(dat[3])
-            dic['NBATH'] = int(dat[5])
-        elif 'UHF' in dat:
-            dat = re.split('[=,]', dat)
-            if 'TRUE' in dat[1].upper():
-                dic['UHF'] = True
-            else:
-                dic['UHF'] = False
-        elif 'ORBIND' in dat:
-            dat = dat.split('ISYM')[0]
-            dat = re.split('[=,]', dat)[1:-1]
-            idx = map(int, dat)
-            dic['ORBIND'] = [i-1 for i in idx]  # transform to 0-based indices
-        elif 'END' in dat:
+        if 'END' in dat:
             break
+        head.append(dat[:-1]) # exclude '\n'
+        dat = finp.readline()
+    head = ''.join(head).replace(' ','')
+    kviter = iter(re.split('[=,]', head[4:]))
+    while True:
+        try:
+            kv = kviter.next()
+        except StopIteration:
+            break
+        if 'FCI' in kv:
+            pass
+        elif kv in ('NORB', 'NIMP', 'NBATH', 'NELEC', 'MS2', 'ISYM'):
+            val = kviter.next()
+            dic[kv] = int(val)
+        elif kv == 'ORBIND':
+            idx = []
+            kv = kviter.next()
+            while kv.isdigit():
+                idx.append(kv)
+            dic['ORBIND'] = [int(i)-1 for i in idx]  # transform to 0-based indices
+            dic[kv] = kviter.next()
+    dic['NEMB'] = dic['NORB']
+
     nemb = dic['NEMB']
     norb = hfdic['NORB']
     npair = nemb*(nemb+1)/2
