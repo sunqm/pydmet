@@ -68,24 +68,17 @@ def read_clustdump(clustdump, hfdic):
         head.append(dat[:-1]) # exclude '\n'
         dat = finp.readline()
     head = ''.join(head).replace(' ','')
-    kviter = iter(re.split('[=,]', head[4:]))
-    while True:
-        try:
-            kv = kviter.next()
-        except StopIteration:
-            break
-        if 'FCI' in kv:
-            pass
-        elif kv in ('NORB', 'NIMP', 'NBATH', 'NELEC', 'MS2', 'ISYM'):
-            val = kviter.next()
-            dic[kv] = int(val)
-        elif kv == 'ORBIND':
-            idx = []
-            kv = kviter.next()
-            while kv.isdigit():
-                idx.append(kv)
-            dic['ORBIND'] = [int(i)-1 for i in idx]  # transform to 0-based indices
-            dic[kv] = kviter.next()
+    head = re.split('[=,]', head[4:])
+    for kv in head:
+        if kv.isdigit():
+            dic[klast].append(int(kv))
+        else:
+            klast = kv
+            dic[klast] = []
+    for k, v in dic.items():
+        if len(v) == 1:
+            dic[k] = v[0]
+    dic['ORBIND'] = [i-1 for i in dic['ORBIND']]
     dic['NEMB'] = dic['NORB']
 
     nemb = dic['NEMB']
