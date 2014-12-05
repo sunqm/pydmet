@@ -248,16 +248,19 @@ class EmbSys(object):
         return embs
 
     def update_embs_vfit_ci(self, mol, embs, v_ci_group):
-        def embscf_(emb):
-            h1e = emb._pure_hcore + emb._vhf_env + emb.vfit_ci
+        def embscf_(emb, vfit):
+            h1e = emb._pure_hcore + emb._vhf_env + vfit
             nemb = emb._vhf_env.shape[0]
-            emb.get_hcore = lambda mol=None: h1e
-            emb.get_ovlp = lambda mol=None: numpy.eye(nemb)
+            rdm1 = emb.make_rdm1()
+            emb.get_hcore = lambda *args: h1e
+            emb.get_ovlp = lambda *args: numpy.eye(nemb)
             emb.scf_conv, emb.hf_energy, emb.mo_energy, emb.mo_occ, \
                     emb.mo_coeff_on_imp \
-                    = emb.scf_cycle(emb.mol, emb.conv_threshold, dump_chk=False)
+                    = emb.scf_cycle(emb.mol, emb.conv_threshold,
+                                    dump_chk=False, init_dm=rdm1)
             #ABORTemb.mo_coeff = numpy.dot(emb.impbas_coeff, emb.mo_coeff_on_imp)
             del(emb.get_hcore)
+            del(emb.get_ovlp)
 
         for m, emb in enumerate(embs):
             if v_ci_group[m] is not 0:
@@ -274,7 +277,7 @@ class EmbSys(object):
                 #        emb.mo_coeff_on_imp \
                 #        = simple_hf(emb._pure_hcore+emb._vhf_env+emb.vfit_ci,
                 #                    emb._eri, emb.mo_coeff_on_imp, emb.nelectron)
-                embscf_(emb)
+                embscf_(emb, emb.vfit_ci)
         return embs
 
     # NOTE!: self.embs have not SCF against vfit_mf
@@ -360,7 +363,7 @@ class EmbSys(object):
         return mat_on_ao
 
     def run_hf_with_ext_pot_(self, vext_on_ao, follow_state=False):
-        run_hf_with_ext_pot_(self.mol, self.entire_scf, vext_on_ao, follow_state)
+        return run_hf_with_ext_pot_(self.mol, self.entire_scf, vext_on_ao, follow_state)
 
     def update_embsys(self, mol, v_mf_group):
         if self.with_hopping:
@@ -399,14 +402,12 @@ class EmbSys(object):
                 ehfinhf = (hfdm[:nimp]*(emb._pure_hcore)[:nimp]).sum() \
                         + (hfdm[:nimp]*(vhf+emb._vhf_env)[:nimp]).sum() * .5
 
-                log.debug(self, 'fragment %3d, HF-in-HF, frag energy = %.12g, nelec = %.9g',
-                          m, ehfinhf, nelechf)
-                log.debug(self, '             FCI-in-HF, frag energy = %.12g, nelec = %.9g', \
-                          e_frag, nelec_frag)
+                log.debug(self, 'fragment %d FCI-in-HF, frag energy = %.12g, E_corr = %.12g, nelec = %.9g', \
+                          m, e_frag, e_frag-ehfinhf, nelec_frag)
             e_tot += e_frag
             nelec += nelec_frag
             last_frag = m
-        log.info(self, 'DMET-FCI-in-HF of entire system, e_tot = %.9g, nelec_tot = %.9g', \
+        log.info(self, 'sum(e_frag), e_tot = %.9g, nelec_tot = %.9g', \
                   e_tot, nelec)
         return e_tot, nelec
 
@@ -710,9 +711,9 @@ def run_hf_with_ext_pot_(mol, entire_scf, vext_on_ao, follow_state=False):
     def _dup_entire_scf(mol, entire_scf):
         #eff_scf = entire_scf.__class__(mol)
         eff_scf = copy.copy(entire_scf)
-        eff_scf.verbose = 0#entire_scf.verbose
-        eff_scf.conv_threshold = 1e-9#entire_scf.conv_threshold
-        eff_scf.diis_space = 8#entire_scf.diis_space
+        eff_scf.verbose = entire_scf.verbose
+        eff_scf.conv_threshold = entire_scf.conv_threshold
+        eff_scf.diis_space = entire_scf.diis_space
         eff_scf.scf_conv = False
         return eff_scf
     eff_scf = _dup_entire_scf(mol, entire_scf)
@@ -722,9 +723,6 @@ def run_hf_with_ext_pot_(mol, entire_scf, vext_on_ao, follow_state=False):
     # and leads to incorrect MF ground state.
     # In this case, follow old scf as initial guess.
     dm = entire_scf.make_rdm1(entire_scf.mo_coeff, entire_scf.mo_occ)
-    def _make_init_guess_method(mol):
-        return entire_scf.hf_energy, dm
-    eff_scf.make_init_guess = _init_guess
 
     def _get_hcore(mol):
         h = entire_scf.get_hcore(mol)
@@ -764,14 +762,14 @@ def run_hf_with_ext_pot_(mol, entire_scf, vext_on_ao, follow_state=False):
             return mo_occ
         eff_scf.set_occ = _occ_follow_state
 
-    log.debug(mol, 'SCF for entire molecule with fitting potential')
+    log.debug(eff_scf, '-- entire molecule SCF with fitting potential')
     eff_scf.scf_conv, eff_scf.hf_energy, eff_scf.mo_energy, \
             eff_scf.mo_occ, eff_scf.mo_coeff \
-            = eff_scf.scf_cycle(mol, eff_scf.conv_threshold, dump_chk=False)
+            = eff_scf.scf_cycle(mol, eff_scf.conv_threshold, dump_chk=False,
+                                init_dm=dm)
 
     # must release the modified get_hcore to get pure hcore
     del(eff_scf.get_hcore)
-    del(eff_scf.make_init_guess)
     return eff_scf
 
 

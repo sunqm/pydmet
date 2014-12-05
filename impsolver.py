@@ -56,6 +56,7 @@ class CASSCF(ImpSolver):
         self.solver = f
 
 
+
 def simple_hf(h1e, eri, mo, nelec):
     mol = gto.Mole()
     mol.verbose = 0
@@ -173,4 +174,42 @@ def casscf(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag,
         e2frag = 0
     else:
         e2frag = 0
+    return 0, eci, e2frag, dm1
+
+
+
+
+class InterNormFCI(ImpSolver):
+    '''<0|H|CI> with <0|CI> = 1'''
+    def __init__(self):
+        ImpSolver.__init__(self, internorm_fci)
+
+def internorm_fci(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
+# use HF as intial guess for FCI solver
+    eri1 = ao2mo.restore(8, eri, mo.shape[1])
+    hf_energy, mo_energy, mo_occ, mo = simple_hf(h1e, eri1, mo, nelec)
+    h1e = reduce(numpy.dot, (mo.T, h1e, mo))
+    eri1 = ao2mo.incore.full(eri1, mo)
+
+    norb = h1e.shape[1]
+    cis = pyscf.fci.solver(mol)
+    cis.verbose = 5
+    eci, c = cis.kernel(h1e, eri1, norb, nelec)
+    c0 = numpy.zeros_like(c)
+    c0[0,0] = 1/c[0,0] # so that <c0|c> = 1
+    if with_1pdm:
+        dm1 = cis.trans_rdm1(c0, c, norb, nelec)
+        dm1 = (dm1 + dm1.T) * .5
+        dm1 = reduce(numpy.dot, (mo, dm1, mo.T))
+    else:
+        dm1 = None
+    if with_e2frag:
+        eri1 = part_eri_hermi(eri, norb, with_e2frag)
+        eri1 = ao2mo.incore.full(eri1, mo)
+        h2e = cis.absorb_h1e(numpy.zeros_like(h1e), eri1, norb, nelec, .5)
+        ci1 = cis.contract_2e(h2e, c, norb, nelec)
+        #e2frag = numpy.dot(c0.ravel(), ci1.ravel())
+        e2frag = c0[0,0] * ci1[0,0]
+    else:
+        e2frag = None
     return 0, eci, e2frag, dm1

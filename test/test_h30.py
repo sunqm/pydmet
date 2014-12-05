@@ -31,3 +31,13 @@ for size in (1,2,3,5,6):
     embsys = dmet_nonsc.EmbSys(mol, mf)
     embsys.frag_group = [partition(nat, size) ]
     print embsys.fullsys()
+
+#import dmet_sc
+#import impsolver
+#for size in (1,2,3,5,6):
+#    embsys = dmet_sc.EmbSys(mol, mf)
+#    embsys.frag_group = [partition(nat, size) ]
+#    embsys.solver = impsolver.InterNormFCI()
+#    #embsys.vfit_ci_method = dmet_sc.gen_all_vfit_by(lambda *args: 0)
+#    embsys.emb_verbose = 5
+#    print embsys.scdmet()
