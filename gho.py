@@ -9,10 +9,8 @@ ref:
     J. Phys. Chem. A, 102, 4714
 '''
 
-__author__ = "Qiming Sun <osirpt.sun@gmail.com>"
-
 import numpy
-import scipy.linalg.flapack as lapack
+import scipy.linalg
 from pyscf import gto
 from pyscf.lib import logger as log
 import dmet_hf
@@ -478,13 +476,29 @@ class UHF(dmet_hf.UHF):
         h1e = self.mat_ao2impbas(scf.hf.RHF.get_hcore(mol))
         return (h1e[0]+self._vhf_env[0], h1e[1]+self._vhf_env[1])
 
-    def make_fock(self, h1e, vhf):
-        return (h1e[0]+vhf[0], h1e[1]+vhf[1])
-
     def eig(self, fock, s):
-        c_a, e_a, info = lapack.dsygv(fock[0], s[0])
-        c_b, e_b, info = lapack.dsygv(fock[1], s[1])
+        e_a, c_a = scipy.linalg.eigh(fock[0], s[0])
+        e_b, c_b = scipy.linalg.eigh(fock[1], s[1])
         return (e_a,e_b), (c_a,c_b)
+
+    def make_fock(self, h1e, s1e, vhf, dm, cycle=-1, adiis=None):
+        f = (h1e[0]+vhf[0], h1e[1]+vhf[1])
+        if 0 <= cycle < self.diis_start_cycle-1:
+            f = (scf.hf.damping(s1e[0], dm[0], f[0], self.damp_factor), \
+                 scf.hf.damping(s1e[1], dm[1], f[1], self.damp_factor))
+            f = (scf.hf.level_shift(s1e[0],dm[0],f[0],self.level_shift_factor), \
+                 scf.hf.level_shift(s1e[1],dm[1],f[1],self.level_shift_factor))
+        elif 0 <= cycle:
+            fac = self.level_shift_factor \
+                    * numpy.exp(self.diis_start_cycle-cycle-1)
+            f = (scf.hf.level_shift(s[0], d[0], f[0], fac), \
+                 scf.hf.level_shift(s[1], d[1], f[1], fac))
+
+        if adiis is not None and cycle >= self.diis_start_cycle:
+            f = adiis.update(s1e, dm, f)
+            f = (f[:h1e[0].size].reshape(h1e[0].shape), \
+                 f[h1e[0].size:].reshape(h1e[1].shape))
+        return f
 
     def set_occ(self, mo_energy, mo_coeff=None):
         mo_occ = [numpy.zeros_like(mo_energy[0]), \
@@ -517,46 +531,11 @@ class UHF(dmet_hf.UHF):
         #log.debug(self, 'beta  density.diag = %s', dm_b.diagonal())
         return (dm_a,dm_b)
 
-    def init_diis(self):
-        udiis = scf.diis.SCF_DIIS(self)
-        udiis.diis_space = self.diis_space
-        #udiis.diis_start_cycle = self.diis_start_cycle
-        def scf_diis(cycle, s, d, f):
-            if cycle >= self.diis_start_cycle:
-                sdf_a = reduce(numpy.dot, (s[0], d[0], f[0]))
-                sdf_b = reduce(numpy.dot, (s[1], d[1], f[1]))
-                erra = (sdf_a.T.conj()-sdf_a).flatten()
-                errb = (sdf_b.T.conj()-sdf_b).flatten()
-                errvec = numpy.hstack((erra, errb))
-                udiis.err_vec_stack.append(errvec)
-                log.debug(self, 'diis-norm(errvec) = %g', \
-                          numpy.linalg.norm(errvec))
-                if udiis.err_vec_stack.__len__() > udiis.diis_space:
-                    udiis.err_vec_stack.pop(0)
-                f1 = numpy.hstack((f[0].flatten(),f[1].flatten()))
-                f1 = scf.diis.DIIS.update(udiis, f1)
-                f = (f1[:f[0].size].reshape(f[0].shape), \
-                     f1[f[0].size:].reshape(f[1].shape))
-            if cycle < self.diis_start_cycle-1:
-                f = (scf.hf.damping(s[0], d[0], f[0], self.damp_factor), \
-                     scf.hf.damping(s[1], d[1], f[1], self.damp_factor))
-                f = (scf.hf.level_shift(s[0],d[0],f[0],self.level_shift_factor), \
-                     scf.hf.level_shift(s[1],d[1],f[1],self.level_shift_factor))
-            else:
-                fac = self.level_shift_factor \
-                        * numpy.exp(self.diis_start_cycle-cycle-1)
-                f = (scf.hf.level_shift(s[0], d[0], f[0], fac), \
-                     scf.hf.level_shift(s[1], d[1], f[1], fac))
-            return f
-        return scf_diis
-
     def imp_scf(self):
         self.orth_coeff = self.get_orth_ao(self.mol)
 
         self.dump_flags()
-        self.init_dmet_scf(self.mol)
-        #dd = self.dets_ovlp(mol, self.impbas_coeff)
-        #log.info(self, 'overlap of determinants before SCF = %.15g', dd)
+        self.build_()
 
         self.scf_conv, self.hf_energy, self.mo_energy, self.mo_occ, \
                 self.mo_coeff_on_imp \

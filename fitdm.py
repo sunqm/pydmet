@@ -4,6 +4,7 @@ import sys
 import numpy
 import scipy.optimize
 import pyscf.lib.logger as log
+import scipy.linalg
 
 
 IMP_AND_BATH  = 1
@@ -276,11 +277,11 @@ class DmFitObj(object):
 
     # for leastsq
     def diff_dm(self, vfit):
-        e, c = numpy.linalg.eigh(self._fock0+self._v_V.decompress(vfit))
+        e, c = scipy.linalg.eigh(self._fock0+self._v_V.decompress(vfit))
         ddm = self._dm_V.diff_den_mat(c, self._nocc, self._dm_ref_alpha)
         return ddm.flatten()
     def jac_ddm(self, vfit):
-        e, c = numpy.linalg.eigh(self._fock0+self._v_V.decompress(vfit))
+        e, c = scipy.linalg.eigh(self._fock0+self._v_V.decompress(vfit))
         return self._dm_V.tensor_v2dm(e, c, self._nocc, self._v_V)
 
     # for Newton-CG
@@ -291,7 +292,7 @@ class DmFitObj(object):
     def grad(self, vfit):
         return self.g
     def update(self, vfit):
-        e, c = numpy.linalg.eigh(self._fock0+self._v_V.decompress(vfit))
+        e, c = scipy.linalg.eigh(self._fock0+self._v_V.decompress(vfit))
         v2dm = self._dm_V.tensor_v2dm(e, c, self._nocc, self._v_V)
         self.h, self.g = self._dm_V.grad_hessian(e, c, self._nocc, \
                                                  self._dm_ref_alpha, v2dm)
@@ -304,7 +305,7 @@ class DmFitImpDiagLinearConstr(DmFitObj):
 # /h  a^T\ /x\ = /-g\
 # \a  0  / \v/   \ b/
     def update(self, vfit):
-        e, c = numpy.linalg.eigh(self._fock0+self._v_V.decompress(vfit))
+        e, c = scipy.linalg.eigh(self._fock0+self._v_V.decompress(vfit))
         v2dm = self._dm_V.tensor_v2dm(e, c, self._nocc, self._v_V)
         h, g = self._dm_V.grad_hessian(e, c, self._nocc, \
                                        self._dm_ref_alpha, v2dm)
@@ -330,7 +331,7 @@ class DmFitImpTraceLinearConstr(DmFitObj):
 # /h  a^T\ /x\ = /-g\
 # \a  0  / \v/   \ b/
     def update(self, vfit):
-        e, c = numpy.linalg.eigh(self._fock0+self._v_V.decompress(vfit))
+        e, c = scipy.linalg.eigh(self._fock0+self._v_V.decompress(vfit))
         v2dm = self._dm_V.tensor_v2dm(e, c, self._nocc, self._v_V)
         h, g = self._dm_V.grad_hessian(e, c, self._nocc, \
                                        self._dm_ref_alpha, v2dm)
@@ -355,13 +356,13 @@ class DmFitImpDiagWeightConstr(DmFitObj):
         DmFitObj.__init__(self, fock0, nocc, nimp, dm_ref_alpha, v_V, dm_V)
 
     def diff_dm(self, vfit):
-        e, c = numpy.linalg.eigh(self._fock0+self._v_V.decompress(vfit))
+        e, c = scipy.linalg.eigh(self._fock0+self._v_V.decompress(vfit))
         ddm = self._dm_V.diff_den_mat(c, self._nocc, self._dm_ref_alpha)
         for i in range(self._nimp):
             ddm[i,i] *= self._weight
         return ddm.flatten()
     def jac_ddm(self, vfit):
-        e, c = numpy.linalg.eigh(self._fock0+self._v_V.decompress(vfit))
+        e, c = scipy.linalg.eigh(self._fock0+self._v_V.decompress(vfit))
         x = self._jac_ddm_common(e, c)
         m = x.shape[-1]
         return x.reshape(-1, m)
@@ -383,7 +384,7 @@ class DmFitImpDiagWeightConstr(DmFitObj):
 # the weighed h,g can also calculated by
 # _dm_V.grad_hessian + weight**2*ImpDiagDM.grad_hessian
 # use the following code for efficiency
-        e, c = numpy.linalg.eigh(self._fock0+self._v_V.decompress(vfit))
+        e, c = scipy.linalg.eigh(self._fock0+self._v_V.decompress(vfit))
         x0 = self._jac_ddm_common(e, c)
         self.h, self.g = self._dm_V.grad_hessian(e, c, self._nocc, \
                                                  self._dm_ref_alpha, x0)
@@ -393,7 +394,7 @@ class DmFitImpTraceWeightConstr(DmFitObj):
         DmFitObj.__init__(self, *args)
 
     def diff_dm(self, vfit):
-        e, c = numpy.linalg.eigh(self._fock0+self._v_V.decompress(vfit))
+        e, c = scipy.linalg.eigh(self._fock0+self._v_V.decompress(vfit))
         ddm = self._dm_V.diff_den_mat(c, self._nocc, self._dm_ref_alpha)
         if isinstance(self._dm_V, ImpDiagDM):
             ddmdiag = ddm[:self._nimp].sum()
@@ -401,7 +402,7 @@ class DmFitImpTraceWeightConstr(DmFitObj):
             ddmdiag = ddm[:self._nimp].trace()
         return numpy.hstack((ddm.flatten(), self._weight*ddmdiag))
     def jac_ddm(self, vfit):
-        e, c = numpy.linalg.eigh(self._fock0+self._v_V.decompress(vfit))
+        e, c = scipy.linalg.eigh(self._fock0+self._v_V.decompress(vfit))
         x = self._jac_ddm_common(e, c)
         m = x.shape[-1]
         return x.reshape(-1, m)
@@ -420,7 +421,7 @@ class DmFitImpTraceWeightConstr(DmFitObj):
         return numpy.vstack((x.reshape(-1,y.size), self._weight*y))
 
     def update(self, vfit):
-        e, c = numpy.linalg.eigh(self._fock0+self._v_V.decompress(vfit))
+        e, c = scipy.linalg.eigh(self._fock0+self._v_V.decompress(vfit))
         x = self._jac_ddm_common(e, c)
         y = x[-1].reshape(1,-1)
         h1 = numpy.dot(y.T, y) * 2
@@ -474,7 +475,7 @@ def step_by_eigh_min(h, g, threshold=1e-6):
     ''' h * x = g '''
     n = h.shape[0]
     h = numpy.array(h)
-    w, u = numpy.linalg.eigh(h)
+    w, u = scipy.linalg.eigh(h)
     g = numpy.array(g)
     idx = []
     step = []
@@ -623,7 +624,7 @@ def fit_solver(dev, fock0, nocc, nimp, dm_ref_alpha, \
         else:
             fitp = DmFitObj(fock0, nocc, nimp, dm_ref_alpha, v_V, dm_V)
             def ddm_diag(vfit):
-                e, c = numpy.linalg.eigh(fock0+v_V.decompress(vfit))
+                e, c = scipy.linalg.eigh(fock0+v_V.decompress(vfit))
                 return dm_V.diff_dm_diag(c, nocc, dm_ref_alpha)[:nimp].sum()
             def grad(vfit):
                 fitp.update(vfit)
@@ -631,7 +632,7 @@ def fit_solver(dev, fock0, nocc, nimp, dm_ref_alpha, \
             #cons = {'type': 'eq', 'fun': ddm_diag}
             dmdiag_V = ImpDiagDM(fock0.shape[0], nimp)
             def jac(vfit):
-                e, c = numpy.linalg.eigh(fock0+v_V.decompress(vfit))
+                e, c = scipy.linalg.eigh(fock0+v_V.decompress(vfit))
                 v2dm = dmdiag_V.tensor_v2dm(e, c, nocc, v_V)
                 return sum(v2dm.reshape(nimp,-1))
             cons = {'type': 'eq', 'fun': ddm_diag, 'jac': jac}
@@ -656,7 +657,7 @@ def fit_solver(dev, fock0, nocc, nimp, dm_ref_alpha, \
         else:
             fitp = DmFitObj(fock0, nocc, nimp, dm_ref_alpha, v_V, dm_V)
             def ddm_diag(vfit):
-                e, c = numpy.linalg.eigh(fock0+v_V.decompress(vfit))
+                e, c = scipy.linalg.eigh(fock0+v_V.decompress(vfit))
                 return dm_V.diff_dm_diag(c, nocc, dm_ref_alpha)[:nimp]
             def grad(vfit):
                 fitp.update(vfit)
@@ -664,7 +665,7 @@ def fit_solver(dev, fock0, nocc, nimp, dm_ref_alpha, \
             #cons = {'type': 'eq', 'fun': ddm_diag}
             dmdiag_V = ImpDiagDM(fock0.shape[0], nimp)
             def jac(vfit):
-                e, c = numpy.linalg.eigh(fock0+v_V.decompress(vfit))
+                e, c = scipy.linalg.eigh(fock0+v_V.decompress(vfit))
                 v2dm = dmdiag_V.tensor_v2dm(e, c, nocc, v_V)
                 return v2dm.reshape(nimp,-1)
             cons = {'type': 'eq', 'fun': ddm_diag, 'jac': jac}
@@ -674,7 +675,7 @@ def fit_solver(dev, fock0, nocc, nimp, dm_ref_alpha, \
                                         options={'maxiter':12,'disp':0}).x
     vfit = v_V.decompress(x)
 
-    e, c = numpy.linalg.eigh(fock0+vfit)
+    e, c = scipy.linalg.eigh(fock0+vfit)
     ddm = dm_V.diff_den_mat(c, nocc, dm_ref_alpha)
     if ddm.ndim == 2:
         ddiag = ddm[:nimp].diagonal()

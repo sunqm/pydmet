@@ -77,9 +77,9 @@ class EmbSys(object):
 #   the fitting potential has already counted the correlation effects.
         self.env_pot_for_ci   = NO_ENV_POT #NO_IMP_BLK
 # whether select the occupations to maximize the overlap to the previous states
-        self.hf_follow_state     = False
+        self.hf_follow_state  = False
 # if > 0, scale the fitting potential, it helps convergence when
-# local_vfit_method is fit_pot_without_local_scf
+# local_vfit_method is fit_without_local_scf
         self.fitpot_damp_fac  = .6
 # when vfit covers imp+bath, with_hopping=true will transform the
 # imp-bath off-diagonal block to the global potential 
@@ -359,6 +359,9 @@ class EmbSys(object):
         mat_on_ao = reduce(numpy.dot, (c_inv.T.conj(), mat, c_inv))
         return mat_on_ao
 
+    def run_hf_with_ext_pot_(self, vext_on_ao, follow_state=False):
+        run_hf_with_ext_pot_(self.mol, self.entire_scf, vext_on_ao, follow_state)
+
     def update_embsys(self, mol, v_mf_group):
         if self.with_hopping:
             v_add = self.assemble_to_fullmat(v_mf_group)
@@ -373,23 +376,6 @@ class EmbSys(object):
         embs = self.update_embs(mol, self.embs, eff_scf)
         self.embs = self.update_embs_vfit_mf(mol, embs, v_mf_group)
         return self
-
-#?    def update_embsys_vglobal(self, mol, v_add):
-#?        v_add_ao = self.mat_orthao2ao(v_add)
-#?        eff_scf = self.run_hf_with_ext_pot_(v_add_ao, self.hf_follow_state)
-#?        self.entire_scf = eff_scf
-#?        for emb in self.embs:
-#?            emb.entire_scf = eff_scf
-#?
-#?        v_group = []
-#?        for m,_,bas_idx in self.uniq_frags:
-#?            v_group.append(v_add[bas_idx][:,bas_idx])
-#?        embs = self.update_embs(mol, self.embs, eff_scf)
-#?        self.embs = self.update_embs_vfit_mf(mol, embs, v_group)
-#?        return self
-
-    def run_hf_with_ext_pot_(self, vext_on_ao, follow_state=False):
-        run_hf_with_ext_pot_(self.mol, self.entire_scf, vext_on_ao, follow_state)
 
 
     def assemble_frag_energy(self, mol):
@@ -583,7 +569,7 @@ class EmbSys(object):
 ###########################################################
 ##ABORT to minimize the DM difference, use mean-field analytic gradients
 def fit_without_local_scf(mol, emb, embsys):
-    _, _, dm_ref = embsys.solver.run(emb, emb._eri, emb.vfit_ci, True, False)
+    dm_ref = embsys.solver.run(emb, emb._eri, emb.vfit_ci, True, False)[2]
     log.debug(embsys, 'dm_ref = %s', dm_ref)
     nimp = len(emb.bas_on_frag)
     # this fock matrix includes the previous fitting potential
@@ -592,12 +578,9 @@ def fit_without_local_scf(mol, emb, embsys):
 
     # The damped potential does not minimize |dm_ref - dm(fock0+v)|^2,
     # but it may help convergence
-    if 0: #old fitting function for debug
-        dv = scfopt.find_emb_potential(mol, dm_ref, fock0, nocc, nimp)
-    else:
-        dv = fitdm.fit_solver(embsys, fock0, nocc, nimp, dm_ref*.5, \
-                              embsys.v_fit_domain, embsys.dm_fit_domain, \
-                              embsys.dm_fit_constraint)
+    dv = fitdm.fit_solver(embsys, fock0, nocc, nimp, dm_ref*.5, \
+                          embsys.v_fit_domain, embsys.dm_fit_domain, \
+                          embsys.dm_fit_constraint)
     if embsys.fitpot_damp_fac > 0:
         dv *= embsys.fitpot_damp_fac
     if dv.size > emb.vfit_mf.size:
@@ -610,29 +593,13 @@ def fit_without_local_scf(mol, emb, embsys):
         dv1[:nv,:nv] += dv
         return dv1
 
-#?def fit_pot_1shot(mol, embsys, frag_id=0):
-#?    v_group = []
-#?    for emb in embsys.embs:
-#?    nimp = len(emb.bas_on_frag)
-#?        v_group.append(numpy.zeros((nimp,nimp)))
-#?    emb = embsys.embs[frag_id]
-#?    v_group[frag_id] = \
-#?            fit_without_local_scf_iter(mol, emb, embsys)
-#?
-#?    if embsys.verbose >= param.VERBOSE_DEBUG:
-#?        log.debug(embsys, 'fitting potential for fragment %d\n' % frag_id)
-#?        fmt = '    %10.5f' * v_group[frag_id].shape[1] + '\n'
-#?        for c in numpy.array(v_group[frag_id]):
-#?            mol.stdout.write(fmt % tuple(c))
-#?    return v_group
-
-def fit_with_local_scf(mol, embsys):
+def fit_with_local_scf(mol, emb, embsys):
     # impurity SCF during local fitting
     assert(0)
     return dv + emb.vfit_mf
 
 
-def fit_fixed_mf_dm(mol, embsys):
+def fit_fixed_mf_dm(mol, emb, embsys):
     # use numfitor to rewrite this function
     assert(0)
     return dv + emb.vfit_mf
@@ -648,7 +615,7 @@ def fit_chemical_potential(mol, emb, embsys):
     def nelec_diff(v):
         vmat = emb.vfit_ci.copy()
         vmat[:nimp,:nimp] = numpy.eye(nimp) * v
-        _, _, dm = embsys.solver.run(emb, emb._eri, vmat, True, False)
+        dm = embsys.solver.run(emb, emb._eri, vmat, True, False)[2]
         #print 'ddm ',nelec_frag,dm[:nimp].trace(), nelec_frag - dm[:nimp].trace()
         return nelec_frag - dm[:nimp].trace()
     chem_pot0 = emb.vfit_ci[0,0]
@@ -693,7 +660,7 @@ def gen_all_vfit_by(local_fit_method):
 def dmet_sc_cycle(mol, embsys):
     #import scf
     #_diis = scf.diis.DIIS(mol)
-    #_diis.diis_space = 6
+    #_diis.space = 6
 
     v_mf_group,_ = embsys.init_embsys(mol)
     v_ci_group = embsys.vfit_ci_method(mol, embsys)

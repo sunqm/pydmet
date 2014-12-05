@@ -13,6 +13,7 @@ import pyscf.lib.parameters as param
 import pyscf.lib.logger as log
 from pyscf import ao2mo
 from pyscf import lo
+from pyscf import tools
 
 
 def select_ao_on_fragment(mol, atm_lst, bas_idx=[]):
@@ -77,7 +78,7 @@ def decompose_den_mat(emb, dm_orth, bas_on_frag, num_bath=-1):
     log.debug(emb, 'number of bath orbital = %d', bath_orb.shape[1])
     if emb.verbose >= param.VERBOSE_DEBUG:
         log.debug(emb, ' ** bath orbital coefficients (on orthogonal basis) **')
-        scf.hf.dump_orbital_coeff(emb.mol, bath_orb)
+        tools.dump_mat.dump_mo(emb.mol, bath_orb)
 
     proj = -numpy.dot(bath_orb, bath_orb.T)
     for i in range(bath_orb.shape[0]):
@@ -124,8 +125,6 @@ def decompose_orbital(emb, mo_orth, bas_on_frag, num_bath=-1,
                       i, w[i], w[i]**2)
         log.debug(emb, 'potentially change in embsys charge = %12.9f', \
                   sum(w[not_idx]**2)+sum(w[rest_idx]**2-1))
-        #log.debug(emb, ' ** env orbital coefficients (on orthogonal basis)**')
-        #scf.hf.dump_orbital_coeff(emb.mol, env_orb)
 
     if gen_imp_site:
         imp_site = mo_bath[bas_on_frag]/w[idx]
@@ -139,10 +138,6 @@ def decompose_orbital(emb, mo_orth, bas_on_frag, num_bath=-1,
         bath_orb = mo_bath * norm
     else:
         bath_orb = mo_bath
-
-    #if emb.verbose >= param.VERBOSE_DEBUG:
-    #    log.debug(emb, ' ** bath orbital coefficients (on orthogonal basis) **')
-    #    scf.hf.dump_orbital_coeff(emb.mol, bath_orb)
 
     return imp_site, bath_orb, env_orb
 
@@ -484,6 +479,8 @@ class UHF(RHF, scf.hf.UHF):
         RHF.__init__(self, entire_scf, orth_ao)
         self.nelectron_alpha = None
         self.nelectron_beta = None
+        self.DIIS = UHF_DIIS
+        self._keys = self._keys | set(['nelectron_alpha', 'nelectron_beta'])
 
     def decompose_den_mat(self, dm_orth):
         imp_a, bath_a, env_a = decompose_den_mat(self, dm_orth[0], \
@@ -658,13 +655,29 @@ class UHF(RHF, scf.hf.UHF):
         h1e = self.mat_ao2impbas(scf.hf.RHF.get_hcore(mol))
         return (h1e[0]+self._vhf_env[0], h1e[1]+self._vhf_env[1])
 
-    def make_fock(self, h1e, vhf):
-        return (h1e[0]+vhf[0], h1e[1]+vhf[1])
-
     def eig(self, fock, s):
         e_a, c_a = scipy.linalg.eigh(fock[0], s[0])
         e_b, c_b = scipy.linalg.eigh(fock[1], s[1])
         return (e_a,e_b), (c_a,c_b)
+
+    def make_fock(self, h1e, s1e, vhf, dm, cycle=-1, adiis=None):
+        f = (h1e[0]+vhf[0], h1e[1]+vhf[1])
+        if 0 <= cycle < self.diis_start_cycle-1:
+            f = (scf.hf.damping(s1e[0], dm[0], f[0], self.damp_factor), \
+                 scf.hf.damping(s1e[1], dm[1], f[1], self.damp_factor))
+            f = (scf.hf.level_shift(s1e[0],dm[0],f[0],self.level_shift_factor), \
+                 scf.hf.level_shift(s1e[1],dm[1],f[1],self.level_shift_factor))
+        elif 0 <= cycle:
+            fac = self.level_shift_factor \
+                    * numpy.exp(self.diis_start_cycle-cycle-1)
+            f = (scf.hf.level_shift(s[0], d[0], f[0], fac), \
+                 scf.hf.level_shift(s[1], d[1], f[1], fac))
+
+        if adiis is not None and cycle >= self.diis_start_cycle:
+            f = adiis.update(s1e, dm, f)
+            f = (f[:h1e[0].size].reshape(h1e[0].shape), \
+                 f[h1e[0].size:].reshape(h1e[1].shape))
+        return f
 
     def set_occ(self, mo_energy, mo_coeff=None):
         mo_occ = [numpy.zeros_like(mo_energy[0]), \
@@ -696,39 +709,6 @@ class UHF(RHF, scf.hf.UHF):
         #log.debug(self, 'alpha density.diag = %s', dm_a.diagonal())
         #log.debug(self, 'beta  density.diag = %s', dm_b.diagonal())
         return (dm_a,dm_b)
-
-    def init_diis(self):
-        udiis = scf.diis.SCF_DIIS(self)
-        udiis.diis_space = self.diis_space
-        #udiis.diis_start_cycle = self.diis_start_cycle
-        def scf_diis(cycle, s, d, f):
-            if cycle >= self.diis_start_cycle:
-                sdf_a = reduce(numpy.dot, (s[0], d[0], f[0]))
-                sdf_b = reduce(numpy.dot, (s[1], d[1], f[1]))
-                erra = (sdf_a.T.conj()-sdf_a).flatten()
-                errb = (sdf_b.T.conj()-sdf_b).flatten()
-                errvec = numpy.hstack((erra, errb))
-                udiis.err_vec_stack.append(errvec)
-                log.debug(self, 'diis-norm(errvec) = %g', \
-                          numpy.linalg.norm(errvec))
-                if udiis.err_vec_stack.__len__() > udiis.diis_space:
-                    udiis.err_vec_stack.pop(0)
-                f1 = numpy.hstack((f[0].flatten(),f[1].flatten()))
-                f1 = scf.diis.DIIS.update(udiis, f1)
-                f = (f1[:f[0].size].reshape(f[0].shape), \
-                     f1[f[0].size:].reshape(f[1].shape))
-            if cycle < self.diis_start_cycle-1:
-                f = (scf.hf.damping(s[0], d[0], f[0], self.damp_factor), \
-                     scf.hf.damping(s[1], d[1], f[1], self.damp_factor))
-                f = (scf.hf.level_shift(s[0],d[0],f[0],self.level_shift_factor), \
-                     scf.hf.level_shift(s[1],d[1],f[1],self.level_shift_factor))
-            else:
-                fac = self.level_shift_factor \
-                        * numpy.exp(self.diis_start_cycle-cycle-1)
-                f = (scf.hf.level_shift(s[0], d[0], f[0], fac), \
-                     scf.hf.level_shift(s[1], d[1], f[1], fac))
-            return f
-        return scf_diis
 
     def imp_scf(self):
         self.dump_flags()
@@ -795,7 +775,7 @@ class UHF(RHF, scf.hf.UHF):
         '''Mulliken M_ij = D_ij S_ji, Mulliken chg_i = \sum_j M_ij'''
         mol = self.mol
         log.info(self, ' ** Mulliken pop alpha/beta (on impurity basis)  **')
-        s1e = mol.intor_symmetric('cint1e_ovlp_sph')
+        s1e = self.entire_scf.get_ovlp(mol)
         c_inv = numpy.dot(self.orth_coeff.T, s1e)
         c_frag_a = numpy.dot(c_inv, self.impbas_coeff[0])
         c_frag_b = numpy.dot(c_inv, self.impbas_coeff[1])
@@ -827,6 +807,13 @@ class UHF(RHF, scf.hf.UHF):
                      ia, symb, nuc - chg[ia])
             frag_charge += nuc - chg[ia]
         log.info(self, 'charge of embsys = %10.5f', frag_charge)
+
+
+class UHF_DIIS(scf.hf.UHF_DIIS):
+    def update(self, s, d, f):
+        self.push_err_vec(s, d, f)
+        fflat = numpy.hstack((f[0].ravel(), f[1].ravel()))
+        return scf.diis.DIIS.update(self, fflat)
 
 
 if __name__ == '__main__':
