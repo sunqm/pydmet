@@ -721,15 +721,14 @@ def dmet_sc_cycle(mol, embsys):
     return e_tot, v_mf_group, v_ci_group
 
 def _check_conv(embsys, dv, de, decorr):
-    conv = True
     if embsys.conv_threshold_vfit > 0:
-        conv = conv and dv < embsys.conv_threshold_vfit
+        conv = dv < embsys.conv_threshold_vfit
     else:
-        conv = conv and dv < embsys.conv_threshold
+        conv = dv < embsys.conv_threshold
     if embsys.conv_threshold_etot > 0:
-        conv = conv and de < embsys.conv_threshold_etot
+        conv = conv or de < embsys.conv_threshold_etot
     else:
-        conv = conv and de < embsys.conv_threshold * .1
+        conv = conv or de < embsys.conv_threshold * .1
     if embsys.conv_threshold_corr > 0:
         conv = conv and decorr < embsys.conv_threshold_corr
     else:
