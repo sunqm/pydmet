@@ -384,6 +384,7 @@ class EmbSys(object):
     def assemble_frag_energy(self, mol):
         e_tot = 0
         nelec = 0
+        e_corr = 0
 
         last_frag = -1
         for m, _, _ in self.all_frags:
@@ -404,12 +405,13 @@ class EmbSys(object):
 
                 log.debug(self, 'fragment %d FCI-in-HF, frag energy = %.12g, E_corr = %.12g, nelec = %.9g', \
                           m, e_frag, e_frag-ehfinhf, nelec_frag)
+            e_corr += e_frag-ehfinhf
             e_tot += e_frag
             nelec += nelec_frag
             last_frag = m
         log.info(self, 'sum(e_frag), e_tot = %.9g, nelec_tot = %.9g', \
                   e_tot, nelec)
-        return e_tot, nelec
+        return e_tot, e_corr, nelec
 
     def extract_frag_energy(self, emb, dm1, e2frag):
         nimp = len(emb.bas_on_frag)
@@ -526,9 +528,9 @@ class EmbSys(object):
             log.debug(self, '** mo_coeff of MF sys (on non-orthogonal AO) **')
             tools.dump_mat.dump_rec(self.stdout, self.entire_scf.mo_coeff, label, start=1)
 
-        e_tot, nelec = self.assemble_frag_energy(mol)
-        log.log(self, 'macro iter = X, e_tot = %.11g, +nuc = %.11g, nelec = %.8g', \
-                e_tot, e_tot+mol.nuclear_repulsion(), nelec)
+        e_tot, e_corr, nelec = self.assemble_frag_energy(mol)
+        log.log(self, 'macro iter = X, e_tot = %.11g, e_tot(corr) = %.12g, +nuc = %.11g, nelec = %.8g', \
+                e_tot, e_corr, e_tot+mol.nuclear_repulsion(), nelec)
         if isinstance(sav_v, str):
             if self.with_hopping:
                 v_add = self.assemble_to_fullmat(v_mf_group)
@@ -668,7 +670,7 @@ def dmet_sc_cycle(mol, embsys):
     embsys.update_embs_vfit_ci(mol, embsys.embs, v_ci_group)
     # to guarantee correct number of electrons, calculate embedded energy
     # before calling update_embsys
-    e_tot, nelec = embsys.assemble_frag_energy(mol)
+    e_tot, e_corr, nelec = embsys.assemble_frag_energy(mol)
     v_group = (v_mf_group, v_ci_group)
     log.info(embsys, 'macro iter = 0, e_tot = %.12g, nelec = %g', \
              e_tot, nelec)
@@ -676,6 +678,7 @@ def dmet_sc_cycle(mol, embsys):
     for icyc in range(embsys.max_iter):
         v_group_old = v_group
         e_tot_old = e_tot
+        e_corr_old = e_corr
 
         #log.debug(embsys, '  HF energy = %.12g', embsys.entire_scf.hf_energy)
         v_mf_group = embsys.vfit_mf_method(mol, embsys)
@@ -686,19 +689,21 @@ def dmet_sc_cycle(mol, embsys):
 
         # to guarantee correct number of electrons, calculate embedded energy
         # before calling update_embsys
-        e_tot, nelec = embsys.assemble_frag_energy(mol)
+        e_tot, e_corr, nelec = embsys.assemble_frag_energy(mol)
         v_group = (v_mf_group, v_ci_group)
 
         dv = embsys.diff_vfit(v_group, v_group_old)
-        log.info(embsys, 'macro iter = %d, e_tot = %.12g, nelec = %g, dv = %g', \
-                 icyc+1, e_tot, nelec, dv)
+        log.info(embsys, 'macro iter = %d, e_tot = %.12g, e_tot(corr) = %.12g, nelec = %g, dv = %g', \
+                 icyc+1, e_tot, e_corr, nelec, dv)
         de = abs(1-e_tot_old/e_tot)
-        log.info(embsys, '                 delta_e = %g, (~ %g%%)', \
-                 e_tot-e_tot_old, de * 100)
+        decorr = abs(e_corr-e_corr_old)
+        log.info(embsys, '                 delta_e = %.12g, (~ %g%%), delta_e(corr) = %.12g', \
+                 e_tot-e_tot_old, de * 100, decorr)
 
         log.debug(embsys, 'CPU time %.8g' % time.clock())
 
-        if dv < embsys.conv_threshold and de < embsys.conv_threshold*.1:
+        if dv < embsys.conv_threshold and de < embsys.conv_threshold*.1 \
+           or decorr < embsys.conv_threshold:
             break
         #import sys
         #if icyc > 1: sys.exit()

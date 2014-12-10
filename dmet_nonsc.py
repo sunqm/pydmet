@@ -33,7 +33,7 @@ class EmbSys(dmet_sc.EmbSys):
         self.init_embsys(mol)
         v_ci_group = self.vfit_ci_method(mol, self)
         self.update_embs_vfit_ci(mol, self.embs, v_ci_group)
-        e_tot, nelec = self.assemble_frag_energy(mol)
+        e_tot, e_corr, nelec = self.assemble_frag_energy(mol)
 
         log.info(self, '====================')
         if self.verbose >= param.VERBOSE_DEBUG:
