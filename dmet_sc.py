@@ -69,6 +69,9 @@ class EmbSys(object):
 
         self.max_iter         = 40
         self.conv_threshold   = 1e-5
+        self.conv_threshold_etot = 0
+        self.conv_threshold_corr = 0
+        self.conv_threshold_vfit = 0
         self.global_fit_dm    = NO_FIXED_DM
         self.v_fit_domain     = IMP_BLK
         self.dm_fit_domain    = IMP_BLK
@@ -114,6 +117,9 @@ class EmbSys(object):
         log.info(self, '******** DMFET/DMET_SC Options *********')
         log.info(self, 'max_iter        = %g', self.max_iter       )
         log.info(self, 'conv_threshold  = %g', self.conv_threshold )
+        log.info(self, 'conv_threshold_etot = %g', self.conv_threshold_etot )
+        log.info(self, 'conv_threshold_corr = %g', self.conv_threshold_corr )
+        log.info(self, 'conv_threshold_vfit = %g', self.conv_threshold_vfit )
         log.info(self, 'global_fit_dm   = %g', self.global_fit_dm  )
         log.info(self, 'v_fit_domain    = %g', self.v_fit_domain   )
         log.info(self, 'dm_fit_domain   = %g', self.dm_fit_domain  )
@@ -702,8 +708,10 @@ def dmet_sc_cycle(mol, embsys):
 
         log.debug(embsys, 'CPU time %.8g' % time.clock())
 
-        if dv < embsys.conv_threshold and de < embsys.conv_threshold*.1 \
-           or decorr < embsys.conv_threshold:
+#        if dv < embsys.conv_threshold and de < embsys.conv_threshold*.1 \
+#           or decorr < embsys.conv_threshold:
+#            break
+        if _check_conv(embsys, dv, de, decorr):
             break
         #import sys
         #if icyc > 1: sys.exit()
@@ -711,6 +719,22 @@ def dmet_sc_cycle(mol, embsys):
         #v_group = _diis.update(v_group)
 
     return e_tot, v_mf_group, v_ci_group
+
+def _check_conv(embsys, dv, de, decorr):
+    conv = True
+    if embsys.conv_threshold_vfit > 0:
+        conv = conv and dv < embsys.conv_threshold_vfit
+    else:
+        conv = conv and dv < embsys.conv_threshold
+    if embsys.conv_threshold_etot > 0:
+        conv = conv and de < embsys.conv_threshold_etot
+    else:
+        conv = conv and de < embsys.conv_threshold * .1
+    if embsys.conv_threshold_corr > 0:
+        conv = conv and decorr < embsys.conv_threshold_corr
+    else:
+        conv = conv and decorr < embsys.conv_threshold
+    return conv
 
 def run_hf_with_ext_pot_(mol, entire_scf, vext_on_ao, follow_state=False):
     def _dup_entire_scf(mol, entire_scf):
