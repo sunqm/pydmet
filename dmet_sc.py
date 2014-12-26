@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import time
-import pickle
 import numpy
 import scipy.linalg
 import copy
@@ -90,11 +89,12 @@ class EmbSys(object):
         self.rand_init        = False
 
         self.orth_coeff = orth_coeff
-        if orth_coeff is None:
-            #self.pre_orth_ao = lo.iao.pre_atm_scf_ao(mol)
-            self.pre_orth_ao = numpy.eye(mol.nao_nr())
-            self.orth_ao_method = 'lowdin'
-            #self.orth_ao_method = 'meta_lowdin'
+        #self.pre_orth_ao = lo.iao.pre_atm_scf_ao(mol)
+        self.pre_orth_ao = numpy.eye(mol.nao_nr())
+        self.orth_ao_method = 'lowdin'
+        #if orth_coeff is None:
+        #    self.orth_ao_method = 'lowdin'
+        #    #self.orth_ao_method = 'meta_lowdin'
 
         self.frag_group = frag_group
         self.basidx_group = None
@@ -110,7 +110,7 @@ class EmbSys(object):
         self.vfit_ci_method = gen_all_vfit_by(fit_chemical_potential)
         self.solver = impsolver.FCI()
 
-        self.init_v = init_v
+        self._init_v = init_v
 
     def dump_flags(self):
         log.info(self, '\n')
@@ -138,36 +138,25 @@ class EmbSys(object):
         self.all_frags, self.uniq_frags = \
                 self.gen_frag_looper(mol, self.frag_group, self.basidx_group)
 
-        v0_group = [0] * len(self.uniq_frags)
-        try:
-            with open(self.init_v, 'r') as f:
-                v_add, v_add_on_ao = pickle.load(f)
-            self.entire_scf = self.run_hf_with_ext_pot_(v_add_on_ao, \
+        if self._init_v is not None:
+            self.entire_scf = self.run_hf_with_ext_pot_(self._init_v, \
                                                         self.hf_follow_state)
-            v_group = []
-            for m,_,bas_idx in self.uniq_frags:
-                v_group.append(v_add[bas_idx][:,bas_idx])
-        except (IOError, TypeError):
-            #if self.rand_init:
-            #   nao = self.orth_coeff.shape[1]
-            #    v_global = numpy.zeros((nao,nao))
-            #    for m, atm_lst, bas_idx in self.all_frags:
-            #        nimp = bas_idx.__len__()
-            #        v = numpy.random.randn(nimp*nimp).reshape(nimp,nimp)
-            #        v = (v + v.T) * .1
-            #        for i, j in enumerate(bas_idx):
-            #            v_global[j,bas_idx] = v[i]
-            #    self.entire_scf = self.run_hf_with_ext_pot_(v_global, \
-            #                                                self.hf_follow_state)
-            v_group = v0_group
 
         embs = self.init_embs(mol, self.entire_scf, self.orth_coeff)
         if self.orth_coeff is None:
             self.orth_coeff = embs[0].orth_coeff
-        embs = self.update_embs_vfit_ci(mol, embs, v0_group)
-        embs = self.update_embs_vfit_mf(mol, embs, v_group)
+
+        v_ci_group = [emb.vfit_ci for emb in embs]
+        v_mf_group = [emb.vfit_mf for emb in embs]
+        if self._init_v is not None:
+            vglobal = self.mat_orthao2ao(self._init_v)
+            for m,_,bas_idx in self.uniq_frags:
+                nimp = len(bas_idx)
+                v_mf_group[m][:nimp,:nimp] = vglobal[bas_idx][:,bas_idx]
+        embs = self.update_embs_vfit_ci(mol, embs, v_ci_group)
+        embs = self.update_embs_vfit_mf(mol, embs, v_mf_group)
         self.embs = embs
-        return v_group, v0_group
+        return v_mf_group, v_ci_group
 
     def init_embs(self, mol, entire_scf, orth_coeff):
         embs = []
@@ -429,10 +418,11 @@ class EmbSys(object):
 
         e1_frag = numpy.dot(dm1[:nimp,:nimp].flatten(),h1e[:nimp,:nimp].flatten())
         e1_bath = numpy.dot(dm1[:nimp,nimp:].flatten(),h1e[:nimp,nimp:].flatten())
-        if self.env_pot_for_ci and emb.vfit_ci is not 0:
-            e1_vfit = numpy.dot(dm1[:nimp].flatten(), emb.vfit_ci[:nimp].flatten())
-        else:
-            e1_vfit = 0
+#        if self.env_pot_for_ci and emb.vfit_ci is not 0:
+#            e1_vfit = numpy.dot(dm1[:nimp].flatten(), emb.vfit_ci[:nimp].flatten())
+#        else:
+#            e1_vfit = 0
+        e1_vfit = 0
         e1 = e1_frag + e1_bath + e1_vfit
         log.debug(emb, 'e1 = %.12g = fragment + bath + fitenv = %.12g + %.12g + %.12g', \
                   e1, e1_frag, e1_bath, e1_vfit)
@@ -481,8 +471,8 @@ class EmbSys(object):
                 fmt = '    %10.5f' * frag_mat_group[m].shape[1] + '\n'
                 for c in numpy.array(frag_mat_group[m]):
                     mol.stdout.write(fmt % tuple(c))
-            except:
-                mol.stdout.write(str(frag_mat_group[m]))
+            except AttributeError:
+                mol.stdout.write('%s\n' % str(frag_mat_group[m]))
 
     # for convergence criteria
     def diff_vfit(self, v_group, v_group_old):
