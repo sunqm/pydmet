@@ -335,7 +335,7 @@ class RHF(scf.hf.RHF):
         if self.entire_scf._eri is not None:
             eri = ao2mo.incore.full(self.entire_scf._eri, self.impbas_coeff)
         else:
-            eri = ao2mo.direct.full_iofree(mol, self.impbas_coeff)
+            eri = ao2mo.outcore.full_iofree(mol, self.impbas_coeff)
         eri = ao2mo.restore(8, eri, self.impbas_coeff.shape[1])
         return eri
 

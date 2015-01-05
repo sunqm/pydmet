@@ -198,7 +198,7 @@ class EmbSys(object):
 
 # * If entire_scf is converged, the embedding HF results can be projected from
 # entire_scf as follows.
-# * vaspimp.OneImpNI cannot use the enitre_scf results, since the 2e parts are
+# * OneImpNI cannot use the enitre_scf results, since the 2e parts are
 # screened.
         if orth_coeff is None:
             orth_coeff = self.orth_coeff
@@ -381,6 +381,8 @@ class EmbSys(object):
         nelec = 0
         e_corr = 0
 
+        sc = numpy.dot(self.entire_scf.get_ovlp(), self.entire_scf.mo_coeff)
+        sds = self.entire_scf.make_rdm1(sc, self.entire_scf.mo_occ)
         last_frag = -1
         for m, _, _ in self.all_frags:
             if m != last_frag:
@@ -392,7 +394,9 @@ class EmbSys(object):
                 e_frag, nelec_frag = \
                         self.extract_frag_energy(emb, dm1, e2frag)
 
-                hfdm = emb.make_rdm1(emb.mo_coeff_on_imp, emb.mo_occ)
+                #emb.mo_coeff_on_imp are changed in function embscf_
+                #hfdm = emb.make_rdm1(emb.mo_coeff_on_imp, emb.mo_occ)
+                hfdm = emb.mat_ao2impbas(sds)
                 vhf = emb.get_veff(mol, hfdm)
                 nelechf = hfdm[:nimp].trace()
                 ehfinhf = (hfdm[:nimp]*(emb._pure_hcore)[:nimp]).sum() \
@@ -435,6 +439,7 @@ class EmbSys(object):
                   e1, e2env_hf, e2frag, e_frag)
         log.debug(emb, 'fragment e2env_hf = %.12g, FCI pTraceSys = %.12g, nelec = %.12g', \
                   e2env_hf, e2frag, nelec_frag)
+
         return e_frag, nelec_frag
 
 
