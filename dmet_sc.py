@@ -207,6 +207,7 @@ class EmbSys(object):
         c_inv = numpy.dot(eff_scf.get_ovlp(mol), orth_coeff).T
         fock0 = numpy.dot(sc*eff_scf.mo_energy, sc.T.conj())
         hcore = eff_scf.get_hcore(mol)
+        vhfwhole = eff_scf.get_veff(mol, eff_scf.make_rdm1())
         nocc = int(eff_scf.mo_occ.sum()) / 2
         for ifrag, emb in enumerate(embs):
             mo_orth = numpy.dot(c_inv, eff_scf.mo_coeff[:,eff_scf.mo_occ>1e-15])
@@ -237,6 +238,17 @@ class EmbSys(object):
             cimp = numpy.dot(emb.impbas_coeff[:,:nimp].T, sc[:,:nocc])
             emb._pure_hcore = emb.mat_ao2impbas(hcore)
             emb._project_nelec_frag = numpy.linalg.norm(cimp)**2*2
+
+# the energy _ehfinhf is defined on emb.entire_scf, which is not the same as
+# the pure SCF of the entire system, because dmet-scf will update
+# emb.entire_scf with fitting potential vfit_mf
+            hfdm = emb.make_rdm1(emb.mo_coeff_on_imp, emb.mo_occ)
+            vhf = emb.mat_ao2impbas(vhfwhole)
+            emb._ehfinhf = numpy.dot(hfdm[:nimp].flatten(),
+                                     emb._pure_hcore[:nimp].flatten()) \
+                         + numpy.dot(hfdm[:nimp].flatten(),
+                                     vhf[:nimp].flatten()) * .5
+            log.debug(self, 'fragment %d ehfinhf = %.12g', ifrag, emb._ehfinhf)
 
         log.debug(self, 'CPU time for set up embsys.embs: %.8g sec', \
                   time.clock()-t0)
@@ -381,8 +393,6 @@ class EmbSys(object):
         nelec = 0
         e_corr = 0
 
-        sc = numpy.dot(self.entire_scf.get_ovlp(), self.entire_scf.mo_coeff)
-        sds = self.entire_scf.make_rdm1(sc, self.entire_scf.mo_occ)
         last_frag = -1
         for m, _, _ in self.all_frags:
             if m != last_frag:
@@ -394,17 +404,9 @@ class EmbSys(object):
                 e_frag, nelec_frag = \
                         self.extract_frag_energy(emb, dm1, e2frag)
 
-                #emb.mo_coeff_on_imp are changed in function embscf_
-                #hfdm = emb.make_rdm1(emb.mo_coeff_on_imp, emb.mo_occ)
-                hfdm = emb.mat_ao2impbas(sds)
-                vhf = emb.get_veff(mol, hfdm)
-                nelechf = hfdm[:nimp].trace()
-                ehfinhf = (hfdm[:nimp]*(emb._pure_hcore)[:nimp]).sum() \
-                        + (hfdm[:nimp]*(vhf+emb._vhf_env)[:nimp]).sum() * .5
-
                 log.debug(self, 'fragment %d FCI-in-HF, frag energy = %.12g, E_corr = %.12g, nelec = %.9g', \
-                          m, e_frag, e_frag-ehfinhf, nelec_frag)
-            e_corr += e_frag-ehfinhf
+                          m, e_frag, e_frag-emb._ehfinhf, nelec_frag)
+            e_corr += e_frag-emb._ehfinhf
             e_tot += e_frag
             nelec += nelec_frag
             last_frag = m

@@ -47,6 +47,7 @@ class EmbSys(dmet_sc.EmbSys):
         dmet_sc.EmbSys.__init__(self, mol, entire_scf, frag_group, init_v,
                                 orth_coeff)
         self.OneImp = OneImpNI
+        self.env_pot_for_ci  = dmet_sc.NO_IMP_BLK
 
     def extract_frag_energy(self, emb, dm1, e2frag):
         nimp = len(emb.bas_on_frag)
