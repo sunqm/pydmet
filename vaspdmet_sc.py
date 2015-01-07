@@ -79,7 +79,10 @@ class EmbSysPeriod(dmet_sc.EmbSys):
                     - emb._vhf_env # exclude HF[core] and correlation potential
 #TODO store the correlation potential on bath
             emb._project_nelec_frag = numpy.linalg.norm(cimp)**2*2
-            #emb.imp_scf()
+
+#CHECK
+            emb._ehfinhf = emb.imp_scf()
+            log.debug(self, 'fragment %d ehfinhf = %.12g', ifrag, emb._ehfinhf)
 
         log.debug(self, 'CPU time for set up embsys.embs: %.8g sec', \
                   time.clock()-t0)

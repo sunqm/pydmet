@@ -49,6 +49,13 @@ class EmbSys(dmet_sc.EmbSys):
         self.OneImp = OneImpNI
         self.env_pot_for_ci  = dmet_sc.NO_IMP_BLK
 
+# The energy expression is  E[HF-entire-sys] + E[FCI-emb] - E[HF-emb]
+# E[HF-emb] is the energy functional of impurity HF density matrix.  There are
+# three possible choices for the imp-HF-DM, (which leasd to the ambiguous
+# definition of E[HF-emb])
+# 1. the projected DM from the real HF of entire system
+# 2. the projected DM form the fake HF (plus fitting potential) of entire system
+# 3. the underlined HF of fake impurity FCI (plus chemical potential)
     def extract_frag_energy(self, emb, dm1, e2frag):
         nimp = len(emb.bas_on_frag)
         hcore = emb._pure_hcore
@@ -58,8 +65,9 @@ class EmbSys(dmet_sc.EmbSys):
         e = numpy.dot(dm1[:nimp].flatten(), hcore[:nimp].flatten()) \
           + numpy.dot(dm1[:nimp].flatten(), vhf[:nimp].flatten()) * .5
 
-        #emb.mo_coeff_on_imp are changed in function embscf_
-        #hfdm = emb.make_rdm1(emb.mo_coeff_on_imp, emb.mo_occ)
+#emb.mo_coeff_on_imp are changed in function embscf_
+#hfdm = emb.make_rdm1(emb.mo_coeff_on_imp, emb.mo_occ)
+# Note the cancellation of h1e[part] dot dm1[part] in HF and FCI energy expression
         c = scipy.linalg.eigh(emb._project_fock)[1]
         hfdm = emb.make_rdm1(c, emb.mo_occ)
         vhfemb = emb.get_veff(emb.mol, hfdm)

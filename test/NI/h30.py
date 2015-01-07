@@ -29,16 +29,18 @@ from pydmet import dmet_sc
 from pydmet import dmet_sc_ni
 from pydmet import dmet_hf
 
-embsys = dmet_sc_ni.EmbSys(mol, mf)
-size = 2
-embsys.frag_group = [partition(nat, size) ]
-embsys.max_iter = 40
-print embsys.scdmet()
+for size in (1,2,5):
+    embsys = dmet_sc_ni.EmbSys(mol, mf)
+    embsys.frag_group = [partition(nat, size) ]
+    embsys.v_fit_domain  = 2
+    embsys.dm_fit_domain = 1
+    embsys.max_iter = 40
+    print embsys.scdmet()
 
 
-embsys = dmet_sc.EmbSys(mol, mf)
-size = 2
-embsys.frag_group = [partition(nat, size) ]
-embsys.max_iter = 40
-print embsys.scdmet()
-
+#embsys = dmet_sc.EmbSys(mol, mf)
+#size = 2
+#embsys.frag_group = [partition(nat, size) ]
+#embsys.max_iter = 40
+#print embsys.scdmet()
+#

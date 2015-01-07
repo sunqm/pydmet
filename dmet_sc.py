@@ -366,7 +366,7 @@ class EmbSys(object):
         '''matrix represented on orthogonal basis to the representation on
         non-orth AOs'''
         c_inv = numpy.dot(self.orth_coeff.T, self.entire_scf.get_ovlp())
-        mat_on_ao = reduce(numpy.dot, (c_inv.T.conj(), mat, c_inv))
+        mat_on_ao = reduce(numpy.dot, (c_inv.T, mat, c_inv))
         return mat_on_ao
 
     def run_hf_with_ext_pot_(self, vext_on_ao, follow_state=False):
@@ -378,6 +378,8 @@ class EmbSys(object):
         else:
             v_add = self.assemble_to_blockmat(v_mf_group)
         v_add_ao = self.mat_orthao2ao(v_add)
+        print v_add
+        print v_add_ao
         eff_scf = self.run_hf_with_ext_pot_(v_add_ao, self.hf_follow_state)
         self.entire_scf = eff_scf
         for emb in self.embs:
@@ -739,7 +741,7 @@ def run_hf_with_ext_pot_(mol, entire_scf, vext_on_ao, follow_state=False):
         eff_scf.verbose = entire_scf.verbose
         eff_scf.conv_threshold = entire_scf.conv_threshold
         eff_scf.diis_space = entire_scf.diis_space
-        eff_scf.scf_conv = False
+        eff_scf.converged = False
         return eff_scf
     eff_scf = _dup_entire_scf(mol, entire_scf)
 
@@ -793,6 +795,7 @@ def run_hf_with_ext_pot_(mol, entire_scf, vext_on_ao, follow_state=False):
             = eff_scf.scf_cycle(mol, eff_scf.conv_threshold, dump_chk=False,
                                 init_dm=dm)
 
+    eff_scf.mulliken_pop(mol, eff_scf.make_rdm1(), eff_scf.get_ovlp())
     # must release the modified get_hcore to get pure hcore
     del(eff_scf.get_hcore)
     return eff_scf

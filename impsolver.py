@@ -130,7 +130,7 @@ def fci(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
 
     norb = h1e.shape[1]
     cis = pyscf.fci.solver(mol)
-    cis.verbose = 5
+    #cis.verbose = 5
     eci, c = cis.kernel(h1e, eri1, norb, nelec)
     if with_1pdm:
         dm1 = cis.make_rdm1(c, norb, nelec)
@@ -193,7 +193,7 @@ def internorm_fci(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
 
     norb = h1e.shape[1]
     cis = pyscf.fci.solver(mol)
-    cis.verbose = 5
+    #cis.verbose = 5
     eci, c = cis.kernel(h1e, eri1, norb, nelec)
     c0 = numpy.zeros_like(c)
     c0[0,0] = 1/c[0,0] # so that <c0|c> = 1
