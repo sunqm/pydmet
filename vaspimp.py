@@ -21,7 +21,7 @@ class OneImp(dmet_hf.RHF):
         dmet_hf.RHF.__init__(self, entire_scf,
                              numpy.eye(entire_scf._vaspdump['NORB']))
         self.bas_on_frag = entire_scf._vaspdump['ORBIND']
-        self.conv_threshold = 1e-8
+        self.conv_tol = 1e-8
         assert(self.entire_scf._vaspdump['NIMP'] == len(self.bas_on_frag))
 
     def build_(self, mol=None):
@@ -30,7 +30,7 @@ class OneImp(dmet_hf.RHF):
         mo_orth = effscf.mo_coeff[:,effscf.mo_occ>1e-15]
         self.imp_site, self.bath_orb, self.env_orb = \
                 dmet_hf.decompose_orbital(self, mo_orth, self.bas_on_frag,
-                                          gen_imp_site=True)
+                                          gen_imp_site=False)
         self.impbas_coeff = self.entire_scf._vaspdump['EMBASIS']
         assert(abs(self.impbas_coeff).sum() > 1e-10) # ensure embasis has been read
         log.debug(self, 'det(<impbas_coeff|readin embasis>) = %.12g',
@@ -81,8 +81,7 @@ class OneImp(dmet_hf.RHF):
         self.build_(self.mol)
         self.scf_conv, self.hf_energy, self.mo_energy, self.mo_occ, \
                 self.mo_coeff_on_imp \
-                = scf.hf.scf_cycle(self.mol, self, self.conv_threshold, \
-                                   dump_chk=False)
+                = scf.hf.kernel(self, self.conv_tol, dump_chk=False)
         self.mo_coeff = numpy.dot(self.impbas_coeff, self.mo_coeff_on_imp)
         if self.scf_conv:
             log.log(self, 'converged impurity sys electronic energy = %.15g', \

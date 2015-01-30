@@ -181,7 +181,7 @@ class RHF(scf.hf.RHF):
 
         #if not entire_scf.scf_conv:
         #    log.info(self, "SCF again before DMET.")
-        #    entire_scf.scf_cycle(mol, entire_scf.conv_threshold*1e2)
+        #    scf.hf.kenerl(entire_scf, entire_scf.conv_tol*1e2)
         self.entire_scf = entire_scf
         self.mol = entire_scf.mol
         self.max_memory = self.entire_scf.max_memory
@@ -212,16 +212,16 @@ class RHF(scf.hf.RHF):
         self._vhf_env = 0
         self.diis_start_cycle = 3
         self.diis_space = entire_scf.diis_space
-        self.conv_threshold = entire_scf.conv_threshold
+        self.conv_tol = entire_scf.conv_tol
         self.max_cycle = entire_scf.max_cycle
         self.init_guess = None
         self.direct_scf = entire_scf.direct_scf
-        self.direct_scf_threshold = entire_scf.direct_scf_threshold
+        self.direct_scf_tol = entire_scf.direct_scf_tol
         self.level_shift_factor = 0
         self.damp_factor = 0
         self.scf_conv = False
         self.direct_scf = True
-        self.direct_scf_threshold = 1e-13
+        self.direct_scf_tol = 1e-13
         self._eri = None
         self.energy_by_env = 0
 
@@ -272,8 +272,9 @@ class RHF(scf.hf.RHF):
                       + numpy.dot(dm_env.flatten(), vhf_env_ao.flatten()) * .5
         return energy_by_env, self.mat_ao2impbas(vhf_env_ao)
 
-    def make_init_guess(self, mol):
+    def get_init_guess(self, key=None):
         log.debug(self, 'init guess based on entire MO coefficients')
+        mol = self.mol
         s = self.entire_scf.get_ovlp(mol)
         eff_scf = self.entire_scf
         entire_scf_dm = eff_scf.make_rdm1(eff_scf.mo_coeff, eff_scf.mo_occ)
@@ -282,7 +283,7 @@ class RHF(scf.hf.RHF):
         cs = numpy.dot(self.impbas_coeff.T.conj(), s)
         dm = reduce(numpy.dot, (cs, entire_scf_dm-dm_env, cs.T.conj()))
         hf_energy = 0
-        return hf_energy, dm
+        return dm
 
     def mat_ao2impbas(self, mat):
         c = self.impbas_coeff
@@ -308,7 +309,7 @@ class RHF(scf.hf.RHF):
         s1e = self.mat_ao2impbas(self.entire_scf.get_ovlp(mol))
         return s1e
 
-    def set_occ(self, mo_energy, mo_coeff=None):
+    def get_occ(self, mo_energy, mo_coeff=None):
         mo_occ = numpy.zeros_like(mo_energy)
         nocc = self.nelectron / 2
         mo_occ[:nocc] = 2
@@ -372,7 +373,7 @@ class RHF(scf.hf.RHF):
 
         self.scf_conv, self.hf_energy, self.mo_energy, self.mo_occ, \
                 self.mo_coeff_on_imp \
-                = scf.hf.scf_cycle(self.mol, self, self.conv_threshold, \
+                = scf.hf.kernel(self.mol, self, self.conv_tol, \
                                    dump_chk=False)
 
         log.info(self, 'impurity MO energy')
@@ -384,7 +385,7 @@ class RHF(scf.hf.RHF):
                 log.info(self, 'impurity virtual MO %d energy = %.15g occ=%g', \
                          i+1, self.mo_energy[i], self.mo_occ[i])
 
-        #e_nuc = self.nuclear_repulsion(self.mol)
+        #e_nuc = self.energy_nuc(self.mol)
         #log.log(self, 'impurity sys nuclear repulsion = %.15g', e_nuc)
         if self.scf_conv:
             log.log(self, 'converged impurity sys electronic energy = %.15g', \
@@ -446,8 +447,8 @@ class RHF(scf.hf.RHF):
     def get_orth_ao(self, mol):
         if self.orth_coeff is None:
             log.debug(self, 'orth method = %s', self.orth_ao_method)
-            return lo.orth.orth_ao(mol, self.pre_orth_ao,
-                                   self.orth_ao_method,
+            return lo.orth.orth_ao(mol, self.orth_ao_method,
+                                   self.pre_orth_ao,
                                    self.entire_scf)
         else:
             return self.orth_coeff
@@ -471,7 +472,7 @@ class RHF(scf.hf.RHF):
 
 
 ##################################################
-class UHF(RHF, scf.hf.UHF):
+class UHF(RHF, scf.uhf.UHF):
     '''Non-relativistic unrestricted Hartree-Fock DMET'''
     def __init__(self, entire_scf, orth_ao=None):
         #assert(isinstance(entire_scf, scf.hf.UHF) \
@@ -612,14 +613,14 @@ class UHF(RHF, scf.hf.UHF):
 
 
 # **** impurity SCF ****
-    def check_dm_converge(self, dm, dm_last, conv_threshold):
+    def check_dm_converge(self, dm, dm_last, conv_tol):
         delta_dm = abs(dm[0]-dm_last[0]).sum() + abs(dm[1]-dm_last[1]).sum()
         dm_change = delta_dm/(abs(dm_last[0]).sum()+abs(dm_last[1]).sum())
         log.info(self, '          sum(delta_dm)=%g (~ %g%%)\n', \
                  delta_dm, dm_change*100)
-        return dm_change < conv_threshold*1e2
+        return dm_change < conv_tol*1e2
 
-    def make_init_guess(self, mol):
+    def get_init_guess(self, mol):
         log.debug(self, 'init guess based on entire MO coefficients')
         s = self.entire_scf.get_ovlp(self.mol)
         eff_scf = self.entire_scf
@@ -633,7 +634,7 @@ class UHF(RHF, scf.hf.UHF):
         dm_a = reduce(numpy.dot, (cs_a, entire_scf_dm[0]-dm_a, cs_a.T.conj()))
         dm_b = reduce(numpy.dot, (cs_b, entire_scf_dm[1]-dm_b, cs_b.T.conj()))
         hf_energy = 0
-        return hf_energy, numpy.array((dm_a,dm_b))
+        return numpy.array((dm_a,dm_b))
 
 #    def eri_on_impbas(self, mol):
 #        if self.entire_scf._eri is not None:
@@ -660,7 +661,7 @@ class UHF(RHF, scf.hf.UHF):
         e_b, c_b = scipy.linalg.eigh(fock[1], s[1])
         return (e_a,e_b), (c_a,c_b)
 
-    def make_fock(self, h1e, s1e, vhf, dm, cycle=-1, adiis=None):
+    def get_fock(self, h1e, s1e, vhf, dm, cycle=-1, adiis=None):
         f = (h1e[0]+vhf[0], h1e[1]+vhf[1])
         if 0 <= cycle < self.diis_start_cycle-1:
             f = (scf.hf.damping(s1e[0], dm[0], f[0], self.damp_factor), \
@@ -679,7 +680,7 @@ class UHF(RHF, scf.hf.UHF):
                  f[h1e[0].size:].reshape(h1e[1].shape))
         return f
 
-    def set_occ(self, mo_energy, mo_coeff=None):
+    def get_occ(self, mo_energy, mo_coeff=None):
         mo_occ = [numpy.zeros_like(mo_energy[0]), \
                   numpy.zeros_like(mo_energy[1])]
         mo_occ[0][:self.nelectron_alpha] = 1
@@ -716,7 +717,7 @@ class UHF(RHF, scf.hf.UHF):
 
         self.scf_conv, self.hf_energy, self.mo_energy, self.mo_occ, \
                 self.mo_coeff_on_imp \
-                = scf.hf.scf_cycle(self.mol, self, self.conv_threshold, \
+                = scf.hf.kernel(self.mol, self, self.conv_tol, \
                                    dump_chk=False)
 
         def dump_mo_energy(mo_energy, mo_occ, title=''):
@@ -809,7 +810,7 @@ class UHF(RHF, scf.hf.UHF):
         log.info(self, 'charge of embsys = %10.5f', frag_charge)
 
 
-class UHF_DIIS(scf.hf.UHF_DIIS):
+class UHF_DIIS(scf.uhf.UHF_DIIS):
     def update(self, s, d, f):
         self.push_err_vec(s, d, f)
         fflat = numpy.hstack((f[0].ravel(), f[1].ravel()))

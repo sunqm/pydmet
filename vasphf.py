@@ -10,12 +10,12 @@ import re
 
 import numpy
 import scipy.linalg
+import h5py
 from pyscf import gto
 from pyscf import scf
 from pyscf import lib
 import pyscf.lib.logger as log
 import pyscf.lib.parameters as param
-import vasp
 
 
 class RHF(scf.hf.RHF):
@@ -39,15 +39,32 @@ class RHF(scf.hf.RHF):
         return numpy.eye(self._vaspdump['NORB'])
 
 
-def read_vaspdump(clustdump, jdump, kdump, fockdump):
+def read_vaspdump(clustdump, jdump, kdump, fockdump, h5dump=None):
 #NOTE read_hfdump returns the integrals in MO representation
-    hfdic = read_hfdump(jdump, kdump, fockdump)
-    dic = read_clustdump(clustdump, hfdic)
-    mo_coeff = dic['MO_COEFF']
-    hfdic['HCORE'] = reduce(numpy.dot, (mo_coeff, hfdic['HCORE'], mo_coeff.T))
-    hfdic['J'] = reduce(numpy.dot, (mo_coeff, hfdic['J'], mo_coeff.T))
-    hfdic['K'] = reduce(numpy.dot, (mo_coeff, hfdic['K'], mo_coeff.T))
-    dic.update(hfdic)
+    if h5py.is_hdf5(clustdump):
+        f = h5py.File(clustdump, 'r')
+        dic = {}
+        for k,v in f.items():
+            if v.shape: # I'm ndarray
+                dic[k] = numpy.array(v)
+            else:
+                dic[k] = v.value
+        f.close()
+    else:
+        hfdic = read_hfdump(jdump, kdump, fockdump)
+        dic = read_clustdump(clustdump, hfdic)
+        mo_coeff = dic['MO_COEFF']
+        hfdic['HCORE'] = reduce(numpy.dot, (mo_coeff, hfdic['HCORE'], mo_coeff.T))
+        hfdic['J'] = reduce(numpy.dot, (mo_coeff, hfdic['J'], mo_coeff.T))
+        hfdic['K'] = reduce(numpy.dot, (mo_coeff, hfdic['K'], mo_coeff.T))
+        dic.update(hfdic)
+        if h5dump is None:
+            h5dump = clustdump+'.h5'
+        f = h5py.File(h5dump, 'w')
+        for k,v in dic.items():
+            sys.stdout.write('h5dump %s\n' % k)
+            f[k] = v
+        f.close()
     return dic
 
 def read_clustdump(clustdump, hfdic):
@@ -202,6 +219,65 @@ def read_hfdump(jdump, kdump, fockdump):
     dic['J'] = vj
     dic['K'] = vk
     return dic
+
+def convert_clustdump(fname, h5name):
+    feri = h5py.File(h5name, 'w')
+    with open(fname, 'r') as fcidump:
+        line = fcidump.readline()
+        for dat in line.split(','):
+            if dat.strip():
+                k, v = dat.split('=')
+                if 'NORB' in k:
+                    feri['NORB'] = int(v)
+                else:
+                    feri[k] = int(v)
+        while 'END' not in line:
+            line = fcidump.readline()
+
+        norb = feri['NORB'].value
+        npair = norb*(norb+1)//2
+        h1emb = numpy.zeros((norb,norb))
+        eri = numpy.zeros(npair*(npair+1)/2)
+        mo_coeff = numpy.zeros((10000,10000))
+        embasis = numpy.zeros((10000,norb))
+        nao = 0
+        line = fcidump.readline().strip()
+        while line:
+            dat = line.split()
+            i, j, k, l = [int(x)-1 for x in dat[1:]]
+            if l == -1:
+                h1emb[i,j] = h1emb[j,i] = float(dat[0])
+            elif l == -2:
+                mo_coeff[i,j] = float(dat[0])
+            elif l == -3:
+                if i > nao:
+                    nao = i
+                embasis[i,j] = float(dat[0])
+            elif l == -4:
+                pass
+            else:
+                if i >= j:
+                    ij = i*(i+1)//2 + j
+                else:
+                    ij = j*(j+1)//2 + i
+                if k >= l:
+                    kl = k*(k+1)//2 + l
+                else:
+                    kl = l*(l+1)//2 + k
+                if ij >= kl:
+                    ijkl = ij*(ij+1)//2 + kl
+                else:
+                    ijkl = kl*(kl+1)//2 + ij
+                eri[ijkl] = float(dat[0])
+            line = fcidump.readline().strip()
+
+        nao += 1
+        feri['NAO'] = nao
+        feri['ERI'] = eri
+        feri['MO_COEFF'] = mo_coeff[:nao,:nao]
+        feri['EMBASIS'] = numpy.dot(mo_coeff[:nao,:nao], embasis[:nao])
+        feri['H1EMB'] = h1emb
+    feri.close()
 
 
 if __name__ == '__main__':

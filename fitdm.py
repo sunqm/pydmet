@@ -449,6 +449,19 @@ def select_v(fit_domain, nemb, nimp):
         return None
     elif fit_domain == TRACE_IMP:
         return None
+    #elif fit_domain == 'off_diag_plus':  #the same value for diagonal term plus off-diag terms
+    #    class _A(ImpBathV):
+    #        def compress(self, vfit):
+    #            idx = numpy.tril_indices(nimp,-1)
+    #            return numpy.append(vfit[0,0],vfit[:nimp,:nimp][idx])
+    #        def decompress(self, vfit):
+    #            idx = numpy.tril_indices(nimp,-1)
+    #            v1 = numpy.eye(nimp) * vfit[0]
+    #            v1[idx] = v1[idx[1],idx[0]] = vfit[1:]
+    #            v2 = numpy.zeros((nemb, nemb))
+    #            v2[:nimp,:nimp] = v1
+    #            return v2
+    #    return _A(nemb,nimp)
 
 def select_dm(fit_domain, nemb, nimp):
     if fit_domain == IMP_AND_BATH:

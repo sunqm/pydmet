@@ -129,7 +129,7 @@ class EmbSysPeriod(dmet_nonsc.EmbSys):
 #        #    log.debug(self, 'vfit_ci = %s', vfit_ci)
 #        #    log.debug(self, 'impurity dm = %s', cires['rdm1'])
 #        log.log(self, 'dmet_nonsc.one_shot: e_tot = %.11g, (+nuc=%.11g)', \
-#                e_tot, e_tot+mol.nuclear_repulsion())
+#                e_tot, e_tot+mol.energy_nuc())
 #        log.log(self, 'e_frag = %.11g, nelec_frag = %.11g', \
 #                e_frag, n_frag)
 #        return e_frag

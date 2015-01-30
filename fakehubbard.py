@@ -5,12 +5,13 @@ from pyscf import gto
 from pyscf import scf
 from pyscf import ao2mo
 
-n = 32
-nefill = 32
-U = 2
+n = 48
+nefill = 48-8*2
+U = 12
 
 mol = gto.Mole()
 mol.verbose = 5
+mol.output = 'out6'
 mol.atom = [('H', (0,0,i)) for i in range(n)]
 mol.basis = 'sto-3g'
 mol.build(verbose=4)
@@ -32,12 +33,10 @@ class Hubbard(scf.hf.RHF):
         return h1
     def get_ovlp(self, *args):
         return numpy.eye(n)
-    def make_init_guess(self, *args):
-        return 0, dm
 
 mf = Hubbard(mol)
 mf._eri = ao2mo.restore(8, eri, n)
-mf.scf()
+mf.scf(dm)
 
 
 from pydmet import dmet_hf
@@ -77,12 +76,22 @@ def partition(nat, size):
     group = numpy.arange(nat).reshape(-1,size)
     return [list(i) for i in group]
 
-size = 4
+size = 2
 embsys = FakeHubbard(mol, mf, orth_coeff=numpy.eye(n))
 embsys.frag_group = [partition(n, size) ]
 embsys.vfit_ci_method = dmet_sc.gen_all_vfit_by(lambda *args: 0)
 embsys.emb_verbose = 0
 embsys.verbose = 5
-#embsys.fitpot_damp_fac  = 1.
-#embsys._init_v = numpy.eye(n)
+embsys.fitpot_damp_fac  = 1.
+embsys._init_v = numpy.eye(n)*(1.*U*nefill/2/n)
+#embsys.v_fit_domain = 'off_diag_plus'
+embsys._init_v = numpy.eye(n)*(.5*U)
+import scipy.linalg
+#embsys._init_v = scipy.linalg.block_diag(
+#    *([numpy.array(
+#[[ 2.27647161, -0.20934772,  0.03522263,  0.16199762],
+# [-0.20934772,  2.27647161, -0.07691276,  0.03522272],
+# [ 0.03522263, -0.07691276,  2.27647161, -0.2093476 ],
+# [ 0.16199762,  0.03522272, -0.2093476 ,  2.27647161]])]*(n//size)))
+
 print embsys.scdmet()

@@ -263,7 +263,7 @@ class EmbSys(object):
             emb.get_ovlp = lambda *args: numpy.eye(nemb)
             emb.scf_conv, emb.hf_energy, emb.mo_energy, emb.mo_occ, \
                     emb.mo_coeff_on_imp \
-                    = emb.scf_cycle(emb.mol, emb.conv_threshold,
+                    = scf.hf.kernel(emb, emb.conv_tol,
                                     dump_chk=False, init_dm=rdm1)
             #ABORTemb.mo_coeff = numpy.dot(emb.impbas_coeff, emb.mo_coeff_on_imp)
             del(emb.get_hcore)
@@ -378,8 +378,6 @@ class EmbSys(object):
         else:
             v_add = self.assemble_to_blockmat(v_mf_group)
         v_add_ao = self.mat_orthao2ao(v_add)
-        print v_add
-        print v_add_ao
         eff_scf = self.run_hf_with_ext_pot_(v_add_ao, self.hf_follow_state)
         self.entire_scf = eff_scf
         for emb in self.embs:
@@ -535,7 +533,7 @@ class EmbSys(object):
 
         e_tot, e_corr, nelec = self.assemble_frag_energy(mol)
         log.log(self, 'macro iter = X, e_tot = %.11g, e_tot(corr) = %.12g, +nuc = %.11g, nelec = %.8g', \
-                e_tot, e_corr, e_tot+mol.nuclear_repulsion(), nelec)
+                e_tot, e_corr, e_tot+mol.energy_nuc(), nelec)
         if isinstance(sav_v, str):
             if self.with_hopping:
                 v_add = self.assemble_to_fullmat(v_mf_group)
@@ -739,7 +737,7 @@ def run_hf_with_ext_pot_(mol, entire_scf, vext_on_ao, follow_state=False):
         #eff_scf = entire_scf.__class__(mol)
         eff_scf = copy.copy(entire_scf)
         eff_scf.verbose = entire_scf.verbose
-        eff_scf.conv_threshold = entire_scf.conv_threshold
+        eff_scf.conv_tol = entire_scf.conv_tol
         eff_scf.diis_space = entire_scf.diis_space
         eff_scf.converged = False
         return eff_scf
@@ -792,7 +790,7 @@ def run_hf_with_ext_pot_(mol, entire_scf, vext_on_ao, follow_state=False):
     log.debug(eff_scf, '-- entire molecule SCF with fitting potential')
     eff_scf.scf_conv, eff_scf.hf_energy, eff_scf.mo_energy, \
             eff_scf.mo_occ, eff_scf.mo_coeff \
-            = eff_scf.scf_cycle(mol, eff_scf.conv_threshold, dump_chk=False,
+            = scf.hf.kernel(eff_scf, eff_scf.conv_tol, dump_chk=False,
                                 init_dm=dm)
 
     eff_scf.mulliken_pop(mol, eff_scf.make_rdm1(), eff_scf.get_ovlp())
