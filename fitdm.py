@@ -118,12 +118,7 @@ def mat_v_to_mat_dm1(e, c, nocc, nd, nv):
     nvir = nmo - nocc
 
     eia = 1 / (e[:nocc].reshape(nocc,1) - e[nocc:])
-    tmpcc = numpy.empty((nmo,nd,nv))
-    for i in range(nmo):
-        ci = c[:,i]
-        for t in range(nd):
-            for u in range(nv):
-                tmpcc[i,t,u] = ci[t] * ci[u]
+    tmpcc = numpy.einsum('ik,jk->kij', c[:nd], c[:nv])
     v = tmpcc.reshape(nmo,nd*nv)
     _x = reduce(numpy.dot, (v[nocc:].T, eia.T, v[:nocc]))
     _x = _x.reshape(nd,nv,nd,nv)
@@ -156,11 +151,13 @@ def symm_trans_mat_for_hermit(n):
     usym = numpy.zeros((n*n, n*(n+1)/2))
     for i in range(n):
         for j in range(i):
-            usym[i*n+j,i*(i+1)/2+j] = numpy.sqrt(.5)
-            usym[j*n+i,i*(i+1)/2+j] = numpy.sqrt(.5)
+            #usym[i*n+j,i*(i+1)/2+j] = numpy.sqrt(.5)
+            #usym[j*n+i,i*(i+1)/2+j] = numpy.sqrt(.5)
             # if considering the weights of the off-diagonal terms
             # usym[i*n+j,i*(i+1)/2+j] = numpy.sqrt(2)
             # usym[j*n+i,i*(i+1)/2+j] = numpy.sqrt(2)
+            usym[i*n+j,i*(i+1)/2+j] = 1
+            usym[j*n+i,i*(i+1)/2+j] = 1
         usym[i*n+i,i*(i+1)/2+i] = 1
     return usym
 
@@ -286,6 +283,10 @@ class DmFitObj(object):
 
     # for Newton-CG
     def norm_ddm(self, vfit):
+        e, c = scipy.linalg.eigh(self._fock0+self._v_V.decompress(vfit))
+        v2dm = self._dm_V.tensor_v2dm(e, c, self._nocc, self._v_V)
+        self.h, self.g = self._dm_V.grad_hessian(e, c, self._nocc, \
+                                                 self._dm_ref_alpha, v2dm)
         return numpy.linalg.norm(self.diff_dm(vfit))
     def hess(self, vfit):
         return self.h
@@ -557,7 +558,7 @@ def line_search_wolfe(dev, fn, dx, c1=1e-4, val0=None, grad0=None, \
         slope = -1e-8 + numpy.dot(grad0.flatten(), dx.flatten()) * c1
     def line_search_iter(val_old, alpha, step, lim):
         val_new = fn(dx*(alpha+step))
-        log.debug(dev, 'wolfe line_search %s, factor = %.9g, val_old = %.9g, val_new = %.9g', \
+        log.debug1(dev, 'wolfe line_search %s, factor = %.9g, val_old = %.9g, val_new = %.9g', \
                   title, alpha+step, val_old, val_new)
         if alpha > 1e2:
             return alpha, val_old
@@ -612,12 +613,16 @@ def fit_solver(dev, fock0, nocc, nimp, dm_ref_alpha, \
     dm_V = select_dm(dm_domain, nemb, nimp)
     if constr == NO_CONSTRAINT:
         fitp = DmFitObj(fock0, nocc, nimp, dm_ref_alpha, v_V, dm_V)
-        if 0:
+        if 1:
             #x = scipy.optimize.minimize(fitp.norm_ddm, fitp.init_guess(), \
             #                            method='Newton-CG', \
             #                            jac=fitp.grad, hess=fitp.hess, \
             #                            tol=1e-8, callback=fitp.update, \
             #                            options={'maxiter':6,'disp':False}).x
+            #x = scipy.optimize.minimize(fitp.norm_ddm, fitp.init_guess(),
+            #                            jac=fitp.grad,
+            #                            callback=fitp.update,
+            #                            options={'disp':False}).x
             x = scipy.optimize.leastsq(fitp.diff_dm, fitp.init_guess(), \
                                        Dfun=fitp.jac_ddm, ftol=1e-8)[0]
         else:

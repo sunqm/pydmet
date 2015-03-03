@@ -16,6 +16,18 @@ import fitdm
 import impsolver
 
 
+# fitting impurity block of vloc for the imp+bath DM, might cause charge
+# transfer of the HF density matrix between impurity and bath.
+# However, it can happen that the fitting only change the chemical potential
+# of HF impurity part.  When this fitting potential is applied to the entire
+# lattice,  it might not really change the entire sys HF density matrix.
+# Therefore, the embedding system (impurity and bath basis, and chemical
+# potential for FCI) might not be updated.  In such scenario, inclusion of the
+# bath part of the fitting potential won't change the embedding system HF
+# density matrix.  So the same amount of HF-chemical potential is needed for
+# the fitting problem.  And such an fitting scheme will never converge.
+
+
 # options for fit_domain
 IMP_AND_BATH  = fitdm.IMP_AND_BATH  # 1
 IMP_BLK       = fitdm.IMP_BLK       # 2
@@ -142,26 +154,9 @@ class EmbSys(object):
             self.entire_scf = self.run_hf_with_ext_pot_(self._init_v, \
                                                         self.hf_follow_state)
 
-        embs = self.init_embs(mol, self.entire_scf, self.orth_coeff)
-        if self.orth_coeff is None:
-            self.orth_coeff = embs[0].orth_coeff
-
-        v_ci_group = [emb.vfit_ci for emb in embs]
-        v_mf_group = [emb.vfit_mf for emb in embs]
-        if self._init_v is not None:
-            vglobal = self.mat_orthao2ao(self._init_v)
-            for m,_,bas_idx in self.uniq_frags:
-                nimp = len(bas_idx)
-                v_mf_group[m][:nimp,:nimp] = vglobal[bas_idx][:,bas_idx]
-        embs = self.update_embs_vfit_ci(mol, embs, v_ci_group)
-        embs = self.update_embs_vfit_mf(mol, embs, v_mf_group)
-        self.embs = embs
-        return v_mf_group, v_ci_group
-
-    def init_embs(self, mol, entire_scf, orth_coeff):
         embs = []
         for m, atm_lst, bas_idx in self.uniq_frags:
-            emb = self.OneImp(entire_scf)
+            emb = self.OneImp(self.entire_scf)
             emb.occ_env_cutoff = 1e-14
             emb.imp_atoms = atm_lst
             emb.imp_basidx = bas_idx
@@ -172,18 +167,27 @@ class EmbSys(object):
             embs.append(emb)
 
         if self.orth_coeff is None:
-            orth_coeff = embs[0].get_orth_ao(mol)
-        else:
-            orth_coeff = self.orth_coeff
+            self.orth_coeff = embs[0].get_orth_ao(mol)
         for emb in embs:
-            emb.orth_coeff = orth_coeff
+            emb.orth_coeff = self.orth_coeff
 
-        embs = self.update_embs(mol, embs, entire_scf, orth_coeff)
-
+        self.update_embs(mol, embs, self.entire_scf, self.orth_coeff)
         for emb in embs:
             emb.vfit_mf = numpy.zeros_like(emb._vhf_env)
             emb.vfit_ci = numpy.zeros_like(emb._vhf_env)
-        return embs
+
+        v_ci_group = [emb.vfit_ci for emb in embs]
+        v_mf_group = [emb.vfit_mf for emb in embs]
+        if self._init_v is not None:
+            vglobal = reduce(numpy.dot, (self.orth_coeff.T, self._init_v,
+                                         self.orth_coeff))
+            for m,_,bas_idx in self.uniq_frags:
+                nimp = len(bas_idx)
+                v_mf_group[m][:nimp,:nimp] = vglobal[bas_idx][:,bas_idx]
+        embs = self.update_embs_vfit_ci(mol, embs, v_ci_group)
+        embs = self.update_embs_vfit_mf(mol, embs, v_mf_group)
+        self.embs = embs
+        return v_mf_group, v_ci_group
 
     # update the embs in terms of the given entire_scf
     def update_embs(self, mol, embs, eff_scf, orth_coeff=None):
@@ -257,21 +261,21 @@ class EmbSys(object):
     def update_embs_vfit_ci(self, mol, embs, v_ci_group):
         def embscf_(emb, vfit):
             h1e = emb._pure_hcore + emb._vhf_env + vfit
-            nemb = emb._vhf_env.shape[0]
+            nemb = emb.impbas_coeff.shape[1]
             rdm1 = emb.make_rdm1()
             emb.get_hcore = lambda *args: h1e
             emb.get_ovlp = lambda *args: numpy.eye(nemb)
-            emb.scf_conv, emb.hf_energy, emb.mo_energy, emb.mo_occ, \
-                    emb.mo_coeff_on_imp \
+            emb.scf_conv, emb.hf_energy, emb.mo_energy, \
+                    emb.mo_coeff_on_imp, emb.mo_occ \
                     = scf.hf.kernel(emb, emb.conv_tol,
-                                    dump_chk=False, init_dm=rdm1)
+                                    dump_chk=False, dm0=rdm1)
             #ABORTemb.mo_coeff = numpy.dot(emb.impbas_coeff, emb.mo_coeff_on_imp)
             del(emb.get_hcore)
             del(emb.get_ovlp)
 
         for m, emb in enumerate(embs):
             if v_ci_group[m] is not 0:
-                if v_ci_group[m].shape[0] < emb._vhf_env.shape[0]:
+                if v_ci_group[m].shape[0] < emb.impbas_coeff.shape[1]:
                     nd = v_ci_group[m].shape[0]
                     emb.vfit_ci[:nd,:nd] = v_ci_group[m]
                 else:
@@ -291,7 +295,7 @@ class EmbSys(object):
     def update_embs_vfit_mf(self, mol, embs, v_mf_group):
         for m, emb in enumerate(embs):
             if v_mf_group[m] is not 0:
-                if v_mf_group[m].shape[0] < emb._vhf_env.shape[0]:
+                if v_mf_group[m].shape[0] < emb.impbas_coeff.shape[1]:
                     nd = v_mf_group[m].shape[0]
                     emb.vfit_mf[:nd,:nd] = v_mf_group[m]
                 else:
@@ -357,7 +361,7 @@ class EmbSys(object):
         return all_frags, uniq_frags
 
     def meta_lowdin_orth(self, mol):
-        self.orth_coeff = lo.orth.orth_ao(mol, self.pre_orth_ao, 'meta_lowdin')
+        self.orth_coeff = lo.orth.orth_ao(mol, 'meta_lowdin', self.pre_orth_ao)
         for emb in self.embs:
             emb.orth_coeff = self.orth_coeff
         return self.orth_coeff
@@ -483,11 +487,17 @@ class EmbSys(object):
 
     # for convergence criteria
     def diff_vfit(self, v_group, v_group_old):
-        dv_mf_group = map(lambda x,y: numpy.linalg.norm(x-y), \
-                          v_group[0], v_group_old[0])
-        dv_ci_group = map(lambda x,y: numpy.linalg.norm(x-y), \
-                          v_group[1], v_group_old[1])
-        return numpy.linalg.norm(dv_mf_group+dv_ci_group)
+        ss = 0
+        for m, atm_lst, bas_idx in self.uniq_frags:
+            nimp = len(bas_idx)
+            # should diagonal terms of mf_vfit be removed?
+            idx = numpy.tril_indices(nimp,-1)
+            ss += numpy.linalg.norm(v_group[0][m][:nimp,:nimp][idx] -
+                                    v_group_old[0][m][:nimp,:nimp][idx])**2 * 4
+            # the uncertainty chemical potential in vift_mf?
+            #ss += numpy.linalg.norm(v_group[1][m][:nimp,:nimp] -
+            #                        v_group_old[1][m][:nimp,:nimp])**2
+        return numpy.sqrt(ss)
 
 
     def scdmet(self, sav_v=None):
@@ -579,7 +589,7 @@ def fit_without_local_scf(mol, emb, embsys):
     log.debug(embsys, 'dm_ref = %s', dm_ref)
     nimp = len(emb.bas_on_frag)
     # this fock matrix includes the previous fitting potential
-    fock0 = emb._project_fock
+    fock0 = emb._project_fock.copy()
     nocc = emb.nelectron/2
 
     # The damped potential does not minimize |dm_ref - dm(fock0+v)|^2,
@@ -665,7 +675,7 @@ def gen_all_vfit_by(local_fit_method):
 ##################################################
 def dmet_sc_cycle(mol, embsys):
     #import scf
-    #_diis = scf.diis.DIIS(mol)
+#    _diis = scf.diis.DIIS(mol)
     #_diis.space = 6
 
     v_mf_group,_ = embsys.init_embsys(mol)
@@ -693,7 +703,7 @@ def dmet_sc_cycle(mol, embsys):
         # to guarantee correct number of electrons, calculate embedded energy
         # before calling update_embsys
         e_tot, e_corr, nelec = embsys.assemble_frag_energy(mol)
-        v_group = (v_mf_group, v_ci_group)
+        v_group = [v_mf_group, v_ci_group]
 
         dv = embsys.diff_vfit(v_group, v_group_old)
         log.info(embsys, 'macro iter = %d, e_tot = %.12g, e_tot(corr) = %.12g, nelec = %g, dv = %g', \
@@ -713,7 +723,7 @@ def dmet_sc_cycle(mol, embsys):
         #import sys
         #if icyc > 1: sys.exit()
 
-        #v_group = _diis.update(v_group)
+#        v_group[0][0] = _diis.update(v_group[0][0])
 
     return e_tot, v_mf_group, v_ci_group
 
@@ -785,13 +795,13 @@ def run_hf_with_ext_pot_(mol, entire_scf, vext_on_ao, follow_state=False):
             eff_scf.mo_coeff = mo_coeff
             eff_scf.mo_occ[:] = mo_occ
             return mo_occ
-        eff_scf.set_occ = _occ_follow_state
+        eff_scf.get_occ = _occ_follow_state
 
     log.debug(eff_scf, '-- entire molecule SCF with fitting potential')
     eff_scf.scf_conv, eff_scf.hf_energy, eff_scf.mo_energy, \
-            eff_scf.mo_occ, eff_scf.mo_coeff \
+            eff_scf.mo_coeff, eff_scf.mo_occ \
             = scf.hf.kernel(eff_scf, eff_scf.conv_tol, dump_chk=False,
-                                init_dm=dm)
+                            dm0=dm)
 
     eff_scf.mulliken_pop(mol, eff_scf.make_rdm1(), eff_scf.get_ovlp())
     # must release the modified get_hcore to get pure hcore

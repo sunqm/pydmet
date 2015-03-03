@@ -345,6 +345,8 @@ class RHF(scf.hf.RHF):
 
 
     def get_veff(self, mol, dm, dm_last=0, vhf_last=0):
+        if self._eri is None:
+            self._eri = self.eri_on_impbas(mol)
         vj, vk = scf.hf.dot_eri_dm(self._eri, dm, hermi=1)
         vhf = vj - vk * .5
         return vhf
@@ -371,8 +373,8 @@ class RHF(scf.hf.RHF):
         self.build_()
         self.dump_flags()
 
-        self.scf_conv, self.hf_energy, self.mo_energy, self.mo_occ, \
-                self.mo_coeff_on_imp \
+        self.scf_conv, self.hf_energy, self.mo_energy, \
+                self.mo_coeff_on_imp, self.mo_occ \
                 = scf.hf.kernel(self.mol, self, self.conv_tol, \
                                    dump_chk=False)
 
@@ -715,8 +717,8 @@ class UHF(RHF, scf.uhf.UHF):
         self.dump_flags()
         self.build_()
 
-        self.scf_conv, self.hf_energy, self.mo_energy, self.mo_occ, \
-                self.mo_coeff_on_imp \
+        self.scf_conv, self.hf_energy, self.mo_energy, \
+                self.mo_coeff_on_imp, self.mo_occ \
                 = scf.hf.kernel(self.mol, self, self.conv_tol, \
                                    dump_chk=False)
 

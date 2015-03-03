@@ -5,7 +5,7 @@
 # Author: Qiming Sun <osirpt.sun@gmail.com>
 #
 
-import sys
+import os, sys
 import re
 
 import numpy
@@ -14,20 +14,22 @@ import h5py
 from pyscf import gto
 from pyscf import scf
 from pyscf import lib
-import pyscf.lib.logger as log
-import pyscf.lib.parameters as param
+from pyscf.lib import logger
 
 
 class RHF(scf.hf.RHF):
     ''' RHF from vasp FCIDUMP'''
-    def __init__(self, mol, clustdump, jdump, kdump, fockdump):
+    def __init__(self, mol, path):
         scf.hf.RHF.__init__(self, mol)
-        self._vaspdump = read_vaspdump(clustdump, jdump, kdump, fockdump)
+        self._vaspdump = read_vaspdump(path)
         self.mo_coeff = self._vaspdump['MO_COEFF']
         self.mo_energy = self._vaspdump['MO_ENERGY']
         self.mo_occ = numpy.zeros(self._vaspdump['NORB'])
         self.mo_occ[:self._vaspdump['NELEC']/2] = 2
         self.mol.nelectron = self._vaspdump['NELEC']
+        self.mol.spheric_labels = \
+                lambda *args: [(i, '', '', '')
+                               for i in range(self._vaspdump['NORB'])]
 
     def get_hcore(self, mol=None):
 #TODO read FOCKDUMP, this Fock matrix excludes the correlation potential, it
@@ -38,9 +40,50 @@ class RHF(scf.hf.RHF):
     def get_ovlp(self, mol=None):
         return numpy.eye(self._vaspdump['NORB'])
 
+#    def analyze(self, verbose=logger.DEBUG):
+#        from pyscf.tools import dump_mat
+#        mo_energy = mf.mo_energy
+#        mo_occ = mf.mo_occ
+#        mo_coeff = mf.mo_coeff
+#        log = logger.Logger(mf.stdout, verbose)
+#        log.info('**** MO energy ****')
+#        for i in range(len(mo_energy)):
+#            if mo_occ[i] > 0:
+#                log.info('occupied MO #%d energy= %.15g occ= %g', \
+#                         i+1, mo_energy[i], mo_occ[i])
+#            else:
+#                log.info('virtual MO #%d energy= %.15g occ= %g', \
+#                         i+1, mo_energy[i], mo_occ[i])
+#        if verbose >= logger.DEBUG:
+#            log.debug(' ** MO coefficients **')
+#            label = None
+#            dump_mat.dump_rec(mf.stdout, mo_coeff, label, start=1)
+#        dm = mf.make_rdm1(mo_coeff, mo_occ)
+#        return mf.mulliken_pop(mf.mol, dm, mf.get_ovlp(), log)
 
-def read_vaspdump(clustdump, jdump, kdump, fockdump, h5dump=None):
+    def mulliken_pop(self, mol, dm, ovlp=None, verbose=logger.DEBUG):
+        if ovlp is None:
+            ovlp = get_ovlp(mol)
+        if isinstance(verbose, logger.Logger):
+            log = verbose
+        else:
+            log = logger.Logger(mol.stdout, verbose)
+        if isinstance(dm, numpy.ndarray) and dm.ndim == 2:
+            pop = numpy.einsum('ij->i', dm*ovlp).real
+        else: # ROHF
+            pop = numpy.einsum('ij->i', (dm[0]+dm[1])*ovlp).real
+
+        log.info(' ** Mulliken pop  **')
+        for i, s in enumerate(pop):
+            log.info('pop of  %d %10.5f', i, s)
+
+
+def read_vaspdump(path, h5dump=None):
 #NOTE read_hfdump returns the integrals in MO representation
+    clustdump = os.path.join(path, 'FCIDUMP.CLUST.GTO')
+    jdump     = os.path.join(path, 'JDUMP')
+    kdump     = os.path.join(path, 'KDUMP')
+    fockdump  = os.path.join(path, 'FOCKDUMP')
     if h5py.is_hdf5(clustdump):
         f = h5py.File(clustdump, 'r')
         dic = {}
@@ -220,7 +263,8 @@ def read_hfdump(jdump, kdump, fockdump):
     dic['K'] = vk
     return dic
 
-def convert_clustdump(fname, h5name):
+def convert_clustdump(path, h5name):
+    fname = os.path.join(path, 'FCIDUMP.CLUST.GTO')
     feri = h5py.File(h5name, 'w')
     with open(fname, 'r') as fcidump:
         line = fcidump.readline()
@@ -283,38 +327,9 @@ def convert_clustdump(fname, h5name):
 if __name__ == '__main__':
     mol = gto.Mole()
     mol.verbose = 5
-    mol.output = 'out_hf'
     mol.build()
 
-#    mf = RHF4test(mol, 'C_solid_2x2x2/test2/FCIDUMP')
-#    energy = mf.scf()
-#    print energy
-#
-#    #print abs(mf._fcidump['HCORE'] - mf._fcidump['HCORE'].T).sum()
-#    dm = mf.make_rdm1()
-#    fcidump0 = read_fcidump('C_solid_2x2x2/test2/FCIDUMP')
-#    vj1, vk1 = scf.hf.dot_eri_dm(fcidump0['ERI'], dm)
-#    vj0, vk0 = scf.hf.dot_eri_dm(fcidump0['ERI'],
-#                               mf.make_init_guess(mol)[1])
-#    print abs(vj0-vj1).sum()
-#    print abs(vk0-vk1).sum()
-#
-#    fcidump1 = read_clustdump('C_solid_2x2x2/test2/FCIDUMP.CLUST.GTO')
-#    fcidump2 = read_jkdump('C_solid_2x2x2/test2/JKDUMP')
-#    nocc = fcidump1['NELEC'] / 2
-#    mo = fcidump1['MO_COEFF']
-#    dm = numpy.dot(mo[:,:nocc], mo[:,:nocc].T) * 2
-#    vj2, vk2 = scf.hf.dot_eri_dm(fcidump1['ERI'], dm)
-#    print abs(fcidump2['J'] - reduce(numpy.dot, (mo.T,vj2,mo))).sum()
-#    print abs(fcidump2['K'] - .5*reduce(numpy.dot, (mo.T,vk2,mo))).sum()
-#    print abs(fcidump2['J'] - vj0).sum()
-#    print abs(fcidump2['K'] - .5*vk0).sum()
-#    print abs(vj1 - vj2).sum()
-#    print abs(vj1 - vk2).sum()
-#    print numpy.linalg.det(fcidump1['MO_COEFF'])
-
-    mf = RHF(mol, 'test/C_solid_2x2x2/test2/FCIDUMP.CLUST.GTO',
-             'test/C_solid_2x2x2/test2/JKDUMP')
+    mf = RHF(mol, 'test/C_solid_2x2x2/test2/')
     energy = mf.scf()
     print energy
     print mf.mo_energy

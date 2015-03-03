@@ -4,6 +4,7 @@ import re
 import numpy
 from pyscf import lib
 import pyscf.lib.logger as log
+from pyscf.lib import logger
 import pyscf.lib.parameters as param
 from pyscf import ao2mo
 from pyscf import gto
@@ -75,14 +76,17 @@ class OneImp(dmet_hf.RHF):
         return ao2mo.restore(8, self.entire_scf._vaspdump['ERI'],
                              self.entire_scf._vaspdump['NEMB'])
 
+    def kernel(self, *args, **kwargs):
+        return self.imp_scf(*args, **kwargs)
     def imp_scf(self):
         self.orth_coeff = self.get_orth_ao(self.mol)
         self.dump_flags()
         self.build_(self.mol)
-        self.scf_conv, self.hf_energy, self.mo_energy, self.mo_occ, \
-                self.mo_coeff_on_imp \
+        self.scf_conv, self.hf_energy, self.mo_energy, \
+                self.mo_coeff_on_imp, self.mo_occ \
                 = scf.hf.kernel(self, self.conv_tol, dump_chk=False)
-        self.mo_coeff = numpy.dot(self.impbas_coeff, self.mo_coeff_on_imp)
+        #self.mo_coeff = numpy.dot(self.impbas_coeff, self.mo_coeff_on_imp)
+        self.mo_coeff = self.mo_coeff_on_imp # because the integrals are read from FCIDUMP
         if self.scf_conv:
             log.log(self, 'converged impurity sys electronic energy = %.15g', \
                     self.hf_energy)
@@ -96,6 +100,22 @@ class OneImp(dmet_hf.RHF):
         self.hf_energy, self.e_frag, self.nelec_frag = \
                 self.calc_frag_elec_energy(self.mol, vhf, dm)
         return self.hf_energy
+
+    def mulliken_pop(self, mol, dm, ovlp=None, verbose=logger.DEBUG):
+        if ovlp is None:
+            ovlp = get_ovlp(mol)
+        if isinstance(verbose, logger.Logger):
+            log = verbose
+        else:
+            log = logger.Logger(mol.stdout, verbose)
+        if isinstance(dm, numpy.ndarray) and dm.ndim == 2:
+            pop = numpy.einsum('ij->i', dm*ovlp).real
+        else: # ROHF
+            pop = numpy.einsum('ij->i', (dm[0]+dm[1])*ovlp).real
+
+        log.info(' ** Mulliken pop  **')
+        for i, s in enumerate(pop):
+            log.info('pop of  %d %10.5f', i, s)
 
 
 ##########################################################################

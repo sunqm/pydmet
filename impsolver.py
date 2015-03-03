@@ -70,15 +70,15 @@ def simple_hf(h1e, eri, mo, nelec):
     mf.get_ovlp = lambda mol: numpy.eye(mo.shape[1])
     mf._eri = eri
 
-    scf_conv, hf_energy, mo_energy, mo_occ, mo_coeff \
-            = scf.hf.kernel(mf, 1e-9, dump_chk=False, init_dm=dm)
-    return hf_energy, mo_energy, mo_occ, mo_coeff
+    scf_conv, hf_energy, mo_energy, mo_coeff, mo_occ \
+            = scf.hf.kernel(mf, 1e-9, dump_chk=False, dm0=dm)
+    return hf_energy, mo_energy, mo_coeff, mo_occ
 
 
 def _psi4cc(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag, ccname='CCSD'):
     import psi4
     eri = ao2mo.restore(8, eri, mo.shape[1])
-    hf_energy, mo_energy, mo_occ, mo = simple_hf(h1e, eri, mo, nelec)
+    hf_energy, mo_energy, mo, mo_occ = simple_hf(h1e, eri, mo, nelec)
 
     h1e = reduce(numpy.dot, (mo.T, h1e, mo))
     eri = ao2mo.incore.full(eri, mo)
@@ -123,7 +123,7 @@ def fci(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
 
 # use HF as intial guess for FCI solver
     eri1 = ao2mo.restore(8, eri, mo.shape[1])
-    hf_energy, mo_energy, mo_occ, mo = simple_hf(h1e, eri1, mo, nelec)
+    hf_energy, mo_energy, mo, mo_occ = simple_hf(h1e, eri1, mo, nelec)
     h1e = reduce(numpy.dot, (mo.T, h1e, mo))
     eri1 = ao2mo.incore.full(eri1, mo)
 
@@ -186,7 +186,7 @@ class InterNormFCI(ImpSolver):
 def internorm_fci(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
 # use HF as intial guess for FCI solver
     eri1 = ao2mo.restore(8, eri, mo.shape[1])
-    hf_energy, mo_energy, mo_occ, mo = simple_hf(h1e, eri1, mo, nelec)
+    hf_energy, mo_energy, mo, mo_occ = simple_hf(h1e, eri1, mo, nelec)
     h1e = reduce(numpy.dot, (mo.T, h1e, mo))
     eri1 = ao2mo.incore.full(eri1, mo)
 
