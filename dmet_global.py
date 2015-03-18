@@ -38,6 +38,7 @@ class EmbSys(object):
         self.solver = impsolver.FCI()
         self.vfit_mf = 0
         self.vfit_ci = [0]
+        self.leastsq = True
 
         self.vfit_ci_method = gen_all_vfit_by(fit_chemical_potential)
 
@@ -198,6 +199,89 @@ class EmbSys(object):
             except:
                 self.stdout.write('%s\n' % str(v))
 
+    def fit_solver(self, fock0, nocc, nimp, dm_ref_alpha):
+        nao = fock0.shape[0]
+        def _decompress(vfit):
+            idx = numpy.tril_indices(nimp)
+            v1 = numpy.zeros((nimp, nimp))
+            v1[idx] = vfit
+            v1[idx[1],idx[0]] = vfit
+            return self.assemble_to_blockmat(v1)
+
+        mol = self.mol
+        c_inv = numpy.dot(self.entire_scf.get_ovlp(), self.orth_coeff).T
+
+        ec = [0, 0]
+        assert(nocc == mol.nelectron // 2)
+        def diff_dm(vfit):
+            f = fock0+_decompress(vfit)
+            e, c = scipy.linalg.eigh(f)
+            ec[:] = (e, c)
+            dm0 = numpy.dot(c[:nimp,:nocc], c[:nimp,:nocc].T)
+            ddm = dm0 - dm_ref_alpha[:nimp,:nimp]
+#
+#            emb = self.OneImp(self.entire_scf)
+#            emb.occ_env_cutoff = 1e-14
+#            emb.bas_on_frag = self.basidx
+#            emb.orth_coeff = self.orth_coeff
+#            emb.verbose = 0
+#            mo_orth = numpy.dot(c_inv, c[:,:nocc])
+#            emb.imp_site, emb.bath_orb, emb.env_orb = \
+#                    dmet_hf.decompose_orbital(emb, mo_orth, emb.bas_on_frag)
+#            emb.impbas_coeff = emb.cons_impurity_basis()
+#            emb.nelectron = mol.nelectron - emb.env_orb.shape[1] * 2
+#            emb._eri = emb.eri_on_impbas(mol)
+#            emb.energy_by_env, emb._vhf_env = emb.init_vhf_env(emb.env_orb)
+#            pf = emb.mat_orthao2impbas(f)
+#            pe, emb.mo_coeff_on_imp = scipy.linalg.eigh(pf)
+#
+#            v1 = emb.mat_orthao2impbas(self.vfit_mf+_decompress(vfit))
+#            v1[:nimp,:nimp] = 0
+#            emb._vhf_env += v1
+#
+#            dm = self.solver.run(emb, emb._eri, 0, True, False)[2]
+#            ddm = dm0 - dm[:nimp,:nimp]
+            return ddm.flatten()
+
+        def jac_ddm(vfit, *args):
+            #e, c = ec
+            e, c = scipy.linalg.eigh(fock0+_decompress(vfit))
+            nao, nmo = c.shape
+            nvir = nmo - nocc
+
+            eia = 1 / (e[:nocc].reshape(nocc,1) - e[nocc:])
+            tmpcc = numpy.einsum('ik,jk->kij', c[:nimp], c)
+            v = tmpcc.reshape(nmo,-1)
+            _x = reduce(numpy.dot, (v[nocc:].T, eia.T, v[:nocc]))
+            _x = _x.reshape(nimp,nao,nimp,nao)
+            x0 = _x.transpose(0,2,1,3)
+            x1 = x0.transpose(1,0,3,2)
+            xx = x0 + x1
+            x = numpy.zeros((nimp,nimp,nimp,nimp))
+            for i in range(nao//nimp):
+                x += xx[:,:,i*nimp:(i+1)*nimp,i*nimp:(i+1)*nimp]
+
+            usymm = symm_trans_mat_for_hermit(nimp)
+            nn = usymm.shape[0]
+            return numpy.dot(x.reshape(-1,nn), usymm)
+
+        if self.leastsq:
+            x = scipy.optimize.leastsq(diff_dm, numpy.zeros(nimp*(nimp+1)/2),
+                                       Dfun=jac_ddm, ftol=1e-8, maxfev=40)
+            #x = scipy.optimize.leastsq(diff_dm, numpy.zeros(nimp*(nimp+1)/2),
+            #                           ftol=1e-8, maxfev=40)
+            sol = _decompress(x[0])
+        else:
+            x = scipy.optimize.minimize(lambda x:numpy.linalg.norm(diff_dm(x))**2,
+                                        numpy.zeros(nimp*(nimp+1)/2),
+                                        jac=lambda x:numpy.einsum('i,ij->j',diff_dm(x),jac_ddm(x)),
+                                        options={'disp':False}).x
+            log.debug(self, 'ddm %s', diff_dm(x))
+            sol = _decompress(x)
+
+        sol -= numpy.eye(nao)*sol.diagonal().mean()
+        return sol
+
 
     def scdmet(self):
         embsys = self
@@ -206,6 +290,7 @@ class EmbSys(object):
         vfit_mf = embsys.build_(mol)[0]
         vfit_ci = embsys.vfit_ci_method(mol, embsys)
         embsys.vfit_ci = vfit_ci
+        vfit_ci = embsys.vfit_ci
         # to guarantee correct number of electrons, calculate embedded energy
         # before calling update_embsys
         e_tot, e_corr, nelec = embsys.assemble_frag_energy(mol)
@@ -265,14 +350,14 @@ class EmbSys(object):
         fock0 = numpy.dot(sc*self.entire_scf.mo_energy, sc.T.conj())
         nocc = mol.nelectron // 2
 
-        dv = fit_solver(embsys, fock0, nocc, nimp, dmwhole*.5)
+        dv = embsys.fit_solver(fock0, nocc, nimp, dmwhole*.5)
         v = embsys.vfit_mf+dv
         log.debug(self, 'vfit_mf = ')
         try:
             pyscf.tools.dump_mat.dump_tri(self.stdout, v[:nimp,:nimp])
         except:
             self.stdout.write('%s\n' % str(v[:nimp,:nimp]))
-        return embsys.vfit_mf+dv
+        return v
 
 
     def dump_frag_prop_mat(self, mol, frag_mat_group):
@@ -314,7 +399,6 @@ def fit_chemical_potential(mol, m, embsys):
         dm = embsys.solver.run(emb, emb._eri, dv, True, False)[2]
         #print 'ddm ',nelec_frag,dm[:nimp].trace(), nelec_frag - dm[:nimp].trace()
         return nelec_frag - dm[:nimp].trace()
-#OPTIMIZE ME, approximate chemical potential
     sol = scipy.optimize.root(nelec_diff, 0, tol=1e-3, \
                               method='lm', options={'ftol':1e-3, 'maxiter':12})
     log.debug(embsys, 'scipy.optimize summary %s', sol)
@@ -324,88 +408,6 @@ def fit_chemical_potential(mol, m, embsys):
               sol.nfev, sol.success)
     return sol.x[0]
 
-
-
-
-
-
-#####################################################################
-
-
-def fit_solver(embsys, fock0, nocc, nimp, dm_ref_alpha):
-    nao = fock0.shape[0]
-    def _decompress(vfit):
-        idx = numpy.tril_indices(nimp)
-        v1 = numpy.zeros((nimp, nimp))
-        v1[idx] = vfit
-        v1[idx[1],idx[0]] = vfit
-        return embsys.assemble_to_blockmat(v1)
-
-    mol = embsys.mol
-    c_inv = numpy.dot(embsys.entire_scf.get_ovlp(), embsys.orth_coeff).T
-
-    ec = [0, 0]
-    assert(nocc == mol.nelectron // 2)
-    def diff_dm(vfit):
-        f = fock0+_decompress(vfit)
-        e, c = scipy.linalg.eigh(f)
-        ec[:] = (e, c)
-        dm0 = numpy.dot(c[:nimp,:nocc], c[:nimp,:nocc].T)
-        ddm = dm0 - dm_ref_alpha[:nimp,:nimp]
-#
-#        emb = embsys.OneImp(embsys.entire_scf)
-#        emb.occ_env_cutoff = 1e-14
-#        emb.bas_on_frag = embsys.basidx
-#        emb.orth_coeff = embsys.orth_coeff
-#        emb.verbose = 0
-#        mo_orth = numpy.dot(c_inv, c[:,:nocc])
-#        emb.imp_site, emb.bath_orb, emb.env_orb = \
-#                dmet_hf.decompose_orbital(emb, mo_orth, emb.bas_on_frag)
-#        emb.impbas_coeff = emb.cons_impurity_basis()
-#        emb.nelectron = mol.nelectron - emb.env_orb.shape[1] * 2
-#        emb._eri = emb.eri_on_impbas(mol)
-#        emb.energy_by_env, emb._vhf_env = emb.init_vhf_env(emb.env_orb)
-#        pf = emb.mat_orthao2impbas(f)
-#        pe, emb.mo_coeff_on_imp = scipy.linalg.eigh(pf)
-#
-#        v1 = emb.mat_orthao2impbas(embsys.vfit_mf+_decompress(vfit))
-#        v1[:nimp,:nimp] = 0
-#        emb._vhf_env += v1
-#
-#        dm = embsys.solver.run(emb, emb._eri, 0, True, False)[2]
-#        ddm = dm0 - dm[:nimp,:nimp]
-        return ddm.flatten()
-
-    def jac_ddm(vfit, *args):
-        #e, c = ec
-        e, c = scipy.linalg.eigh(fock0+_decompress(vfit))
-        nao, nmo = c.shape
-        nvir = nmo - nocc
-
-        eia = 1 / (e[:nocc].reshape(nocc,1) - e[nocc:])
-        tmpcc = numpy.einsum('ik,jk->kij', c[:nimp], c)
-        v = tmpcc.reshape(nmo,-1)
-        _x = reduce(numpy.dot, (v[nocc:].T, eia.T, v[:nocc]))
-        _x = _x.reshape(nimp,nao,nimp,nao)
-        x0 = _x.transpose(0,2,1,3)
-        x1 = x0.transpose(1,0,3,2)
-        xx = x0 + x1
-        x = numpy.zeros((nimp,nimp,nimp,nimp))
-        for i in range(nao//nimp):
-            x += xx[:,:,i*nimp:(i+1)*nimp,i*nimp:(i+1)*nimp]
-
-        usymm = symm_trans_mat_for_hermit(nimp)
-        nn = usymm.shape[0]
-        return numpy.dot(x.reshape(-1,nn), usymm)
-
-    x = scipy.optimize.leastsq(diff_dm, numpy.zeros(nimp*(nimp+1)/2),
-                               Dfun=jac_ddm, ftol=1e-8, maxfev=40)
-    #x = scipy.optimize.leastsq(diff_dm, numpy.zeros(nimp*(nimp+1)/2),
-    #                           ftol=1e-8, maxfev=40)
-    log.debug(embsys, 'ddm %s', diff_dm(x[0]))
-    sol = _decompress(x[0])
-    sol -= numpy.eye(nao)*sol.diagonal().mean()
-    return sol
 
 def symm_trans_mat_for_hermit(n):
     # transformation matrix to remove the antisymmetric mode
