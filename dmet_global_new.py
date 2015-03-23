@@ -28,30 +28,42 @@ class EmbSys(object):
         self.conv_threshold   = 1e-5
 
         self.orth_coeff = orth_coeff
-        #self.pre_orth_ao = lo.iao.pre_atm_scf_ao(mol)
-        self.pre_orth_ao = numpy.eye(mol.nao_nr())
-        self.orth_ao_method = 'lowdin'
-        self.orth_coeff = lo.orth.orth_ao(mol, 'lowdin', numpy.eye(mol.nao_nr()))
+#        #self.pre_orth_ao = lo.iao.pre_atm_scf_ao(mol)
+#        self.pre_orth_ao = numpy.eye(mol.nao_nr())
+#        self.orth_ao_method = 'lowdin'
+#        self.orth_coeff = lo.orth.orth_ao(mol, 'lowdin', numpy.eye(mol.nao_nr()))
 
-        self.basidx = None
+        self.basidx_group = []
         self.entire_scf = entire_scf
         self.embs = []
         self.solver = impsolver.FCI()
-        self.vfit_mf = 0
-        self.vfit_ci = [0]
+        self.vfit_mf = []
+        self.vfit_ci = []
         self.leastsq = True
+        self.translational = True
 
         self.vfit_ci_method = gen_all_vfit_by(fit_chemical_potential)
 
 
     def build_(self, mol):
+        assert(self.orth_coeff is not None)
+
         embs = []
-        emb = self.OneImp(self.entire_scf)
-        emb.occ_env_cutoff = 1e-14
-        emb.bas_on_frag = self.basidx
-        emb.orth_coeff = self.orth_coeff
-        emb.verbose = 0
-        embs.append(emb)
+        self.vfit_mf = []
+        self.vfit_ci = []
+        for bidx in self.basidx_group:
+            emb = self.OneImp(self.entire_scf)
+            emb.occ_env_cutoff = 1e-14
+            emb.bas_on_frag = bidx
+            emb.orth_coeff = self.orth_coeff
+            emb.verbose = 0
+            embs.append(emb)
+            nimp = len(bidx)
+            self.vfit_mf.append(numpy.zeros((nimp,nimp)))
+            self.vfit_ci.append(numpy.zeros((nimp,nimp)))
+            if self.translational:
+                break
+
         self.update_embs(mol, embs, self.entire_scf, self.orth_coeff)
         self.embs = embs
 
@@ -125,8 +137,7 @@ class EmbSys(object):
         for emb in self.embs:
             emb.entire_scf = self.entire_scf
 
-        embs = self.update_embs(mol, self.embs, self.entire_scf,
-                                self.orth_coeff)
+        self.update_embs(mol, self.embs, self.entire_scf, self.orth_coeff)
         self.vfit_mf = vfit_mf
         self.vfit_ci = vfit_ci
 
@@ -147,6 +158,11 @@ class EmbSys(object):
                       m, e_frag, nelec_frag)
             e_tot += e_frag
             nelec += nelec_frag
+        if self.translational:
+            nao = self.orth_coeff.shape[0]
+            nimp = len(self.embs[0].bas_on_frag)
+            e_tot = e_tot * (nao//nimp)
+            nelec = nelec * (nao//nimp)
         log.info(self, 'sum(e_frag), energy = %.9g, nelec = %.9g',
                   e_tot, nelec)
         return e_tot, 0, nelec
@@ -182,15 +198,30 @@ class EmbSys(object):
         return e_frag, nelec_frag
 
 
+    def unpack(self, v_group):
+        return self.assemble_to_blockmat(v_group)
     def assemble_to_blockmat(self, v_group):
         '''assemble matrix on impuity sites to the diagonal block'''
         nao = self.orth_coeff.shape[1]
         v_add = numpy.zeros((nao,nao))
-        if isinstance(v_group, numpy.ndarray):
-            nimp = v_group.shape[0]
-            for i in range(nao//nimp):
-                v_add[i*nimp:(i+1)*nimp,i*nimp:(i+1)*nimp] = v_group
+        if self.translational:
+            nimp = len(self.basidx_group[0])
+            for m,basidx in enumerate(self.basidx_group):
+                bidx = numpy.array(basidx)
+                v_add[bidx[:,None],bidx] = v_group[0][:nimp,:nimp]
+        else:
+            for m, basidx in enumerate(self.basidx_group):
+                nimp = len(basidx)
+                bidx = numpy.array(basidx)
+                v_add[bidx[:,None],bidx] = v_group[m][:nimp,:nimp]
         return v_add
+
+    def pack(self, v):
+        v_group = []
+        for i,basidx in enumerate(self.basidx_group):
+            bidx = numpy.array(basidx)
+            v_group.append(v[bidx[:,None],bidx])
+        return v_group
 
     def dump_frag_prop_mat(self, mol, frag_mat_group):
         '''dump fragment potential or density matrix'''
@@ -200,102 +231,119 @@ class EmbSys(object):
             except:
                 self.stdout.write('%s\n' % str(v))
 
-    def fit_solver(self, fock0, nocc, nimp, dm_ref_alpha):
+    def fit_solver(self, fock0, nocc, dm_ref_alpha):
         nao = fock0.shape[0]
-        def _decompress(vfit):
-            idx = numpy.tril_indices(nimp)
-            v1 = numpy.zeros((nimp, nimp))
-            v1[idx] = vfit
-            v1[idx[1],idx[0]] = vfit
-            return self.assemble_to_blockmat(v1)
-
         mol = self.mol
         c_inv = numpy.dot(self.entire_scf.get_ovlp(), self.orth_coeff).T
-
-        ec = [0, 0]
         assert(nocc == mol.nelectron // 2)
+        if self.translational:
+            assert(len(self.embs) == 1)
+        def _decompress(vfit):
+            p0 = 0
+            v = numpy.zeros_like(fock0)
+            for m,emb in enumerate(self.embs):
+                nimp = len(emb.bas_on_frag)
+                bidx = numpy.array(emb.bas_on_frag)
+                idx = numpy.tril_indices(nimp)
+                v1 = numpy.empty((nimp,nimp))
+                p1 = p0 + nimp*(nimp+1)//2
+                v1[idx] = vfit[p0:p1]
+                v1[idx[1],idx[0]] = vfit[p0:p1]
+                v[bidx[:,None],bidx] = v1
+                p0 = p1
+            if self.translational:
+                bidx = numpy.array(self.basidx_group[0])
+                v = self.unpack([v[bidx[:,None],bidx]])
+            return v
+
         def diff_dm(vfit):
             f = fock0+_decompress(vfit)
             e, c = scipy.linalg.eigh(f)
-            ec[:] = (e, c)
-            if self.dm_fit_domain == dmet_sc.IMP_BLK:
-                c1 = c[:nimp]
-                dm_ref = dm_ref_alpha[:nimp,:nimp]
-            else:
-                c1 = numpy.vstack((c[:nimp],numpy.dot(self.embs[0].bath_orb.T,c)))
-                nemb = c1.shape[0]
-                dm_ref = dm_ref_alpha[:nemb,:nemb]
-            dm0 = numpy.dot(c1[:,:nocc], c1[:,:nocc].T)
-            ddm = dm0 - dm_ref
-#
-#            emb = self.OneImp(self.entire_scf)
-#            emb.occ_env_cutoff = 1e-14
-#            emb.bas_on_frag = self.basidx
-#            emb.orth_coeff = self.orth_coeff
-#            emb.verbose = 0
-#            mo_orth = numpy.dot(c_inv, c[:,:nocc])
-#            emb.imp_site, emb.bath_orb, emb.env_orb = \
-#                    dmet_hf.decompose_orbital(emb, mo_orth, emb.bas_on_frag)
-#            emb.impbas_coeff = emb.cons_impurity_basis()
-#            emb.nelectron = mol.nelectron - emb.env_orb.shape[1] * 2
-#            emb._eri = emb.eri_on_impbas(mol)
-#            emb.energy_by_env, emb._vhf_env = emb.init_vhf_env(emb.env_orb)
-#            pf = emb.mat_orthao2impbas(f)
-#            pe, emb.mo_coeff_on_imp = scipy.linalg.eigh(pf)
-#
-#            v1 = emb.mat_orthao2impbas(self.vfit_mf+_decompress(vfit))
-#            v1[:nimp,:nimp] = 0
-#            emb._vhf_env += v1
-#
-#            dm = self.solver.run(emb, emb._eri, 0, True, False)[2]
-#            ddm = dm0 - dm[:nimp,:nimp]
-            return ddm.flatten()
+            ddm = []
+            for m,emb in enumerate(self.embs):
+                bidx = numpy.array(emb.bas_on_frag)
+                nimp = len(bidx)
+                if self.dm_fit_domain == dmet_sc.IMP_BLK:
+                    c1 = c[bidx]
+                    dm_ref = dm_ref_alpha[m][:nimp,:nimp]
+                else:
+                    c1 = numpy.vstack((c[bidx], numpy.dot(emb.bath_orb.T,c)))
+                    dm_ref = dm_ref_alpha[m]
+                dm0 = numpy.dot(c1[:,:nocc], c1[:,:nocc].T)
+                ddm.append((dm0-dm_ref).ravel())
+            return numpy.hstack(ddm)
 
         def jac_ddm(vfit, *args):
-            #e, c = ec
             e, c = scipy.linalg.eigh(fock0+_decompress(vfit))
             nao, nmo = c.shape
             nvir = nmo - nocc
-            if self.dm_fit_domain == dmet_sc.IMP_BLK:
-                c1 = c[:nimp]
-            else:
-                c1 = numpy.dot(self.embs[0].impbas_coeff.T, c)
-            nf = c1.shape[0]
-
             eia = 1 / (e[:nocc].reshape(nocc,1) - e[nocc:])
-            tmpcc = numpy.einsum('ik,jk->kij', c1, c)
-            v = tmpcc.reshape(nmo,-1)
-            _x = reduce(numpy.dot, (v[nocc:].T, eia.T, v[:nocc]))
-            _x = _x.reshape(nf,nao,nf,nao)
-            x0 = _x.transpose(0,2,1,3)
-            x1 = x0.transpose(1,0,3,2)
-            xx = x0 + x1
-            x = numpy.zeros((nf,nf,nimp,nimp))
-            for i in range(nao//nimp):
-                x += xx[:,:,i*nimp:(i+1)*nimp,i*nimp:(i+1)*nimp]
+            ddm = []
+            xtmp = []
+            for m,emb in enumerate(self.embs):
+                bidx = numpy.array(emb.bas_on_frag)
+                nimp = len(bidx)
+                if self.dm_fit_domain == dmet_sc.IMP_BLK:
+                    c1 = c[bidx]
+                    dm_ref = dm_ref_alpha[m][:nimp,:nimp]
+                else:
+                    c1 = numpy.vstack((c[bidx], numpy.dot(emb.bath_orb.T,c)))
+                    dm_ref = dm_ref_alpha[m]
+                dm0 = numpy.dot(c1[:,:nocc], c1[:,:nocc].T)
+                ddm.append((dm0-dm_ref).ravel())
+                nf = c1.shape[0]
 
-            usymm = symm_trans_mat_for_hermit(nimp)
-            nn = usymm.shape[0]
-            return numpy.dot(x.reshape(-1,nn), usymm)
+                tmpcc = numpy.einsum('ik,jk->kij', c1, c)
+                v = tmpcc.reshape(nmo,-1)
+                _x = reduce(numpy.dot, (v[nocc:].T, eia.T, v[:nocc]))
+                _x = _x.reshape(nf,nao,nf,nao) # nf for dm, nao for v
+                x0 = _x.transpose(0,2,1,3)
+                x1 = x0.transpose(1,0,3,2)
+                xx = x0 + x1
+                xtmp.append(xx.reshape(nf*nf,-1))
+            xtmp = numpy.vstack(xtmp).reshape(-1,nao,nao)
+            x = []
+            for m,basidx in enumerate(self.basidx_group):
+                bidx = numpy.array(basidx)
+                nimp = len(bidx)
+                tmp = xtmp[:,bidx[:,None],bidx]
+                usymm = symm_trans_mat_for_hermit(nimp)
+                nn = usymm.shape[0]
+                x.append(numpy.dot(tmp.reshape(-1,nn), usymm))
+            x = numpy.hstack(x)
+            if self.translational:
+                nimp = len(self.basidx_group[0])
+                n2 = nimp * (nimp+1) // 2
+                x0 = numpy.zeros((x.shape[0],n2))
+                for m,basidx in enumerate(self.basidx_group):
+                    x0 += x[:,m*n2:(m+1)*n2]
+                x = x0
+            return x
 
+        p0 = 0
+        for m,emb in enumerate(self.embs):
+            nimp = len(emb.bas_on_frag)
+            p0 += nimp * (nimp+1) // 2
+        vfit0 = numpy.zeros(p0)
         if self.leastsq:
-            x = scipy.optimize.leastsq(diff_dm, numpy.zeros(nimp*(nimp+1)/2),
-                                       #Dfun=jac_ddm,
+            x = scipy.optimize.leastsq(diff_dm, vfit0, Dfun=jac_ddm,
                                        ftol=1e-8, maxfev=40)
-            #x = scipy.optimize.leastsq(diff_dm, numpy.zeros(nimp*(nimp+1)/2),
-            #                           ftol=1e-8, maxfev=40)
             log.debug(self, 'norm(ddm) %s', numpy.linalg.norm(diff_dm(x[0])))
             sol = _decompress(x[0])
         else:
             x = scipy.optimize.minimize(lambda x:numpy.linalg.norm(diff_dm(x))**2,
-                                        numpy.zeros(nimp*(nimp+1)/2),
+                                        vfit0,
                                         jac=lambda x:numpy.einsum('i,ij->j',diff_dm(x),jac_ddm(x)),
                                         options={'disp':False}).x
             log.debug(self, 'norm(ddm) %s', numpy.linalg.norm(diff_dm(x)))
             sol = _decompress(x)
 
         sol -= numpy.eye(nao)*sol.diagonal().mean()
-        return sol
+        vfit_mf = []
+        for m, emb in enumerate(self.embs):
+            bidx = numpy.array(emb.bas_on_frag)
+            vfit_mf.append(sol[bidx[:,None],bidx])
+        return vfit_mf
 
 
     def scdmet(self):
@@ -310,7 +358,7 @@ class EmbSys(object):
         # before calling update_embsys
         e_tot, e_corr, nelec = embsys.assemble_frag_energy(mol)
         log.info(embsys, 'macro iter = 0, e_tot = %.12g, nelec = %g', e_tot, nelec)
-        vfit_mf_old = vfit_mf
+        vfit_mf_old = embsys.unpack(vfit_mf)
         vfit_ci_old = vfit_ci
         e_tot_old = e_tot
         e_corr_old = e_corr
@@ -328,9 +376,14 @@ class EmbSys(object):
             # before calling update_embsys
             e_tot, e_corr, nelec = embsys.assemble_frag_energy(mol)
 
-            dv = vfit_mf - vfit_mf_old
+            dv = embsys.unpack(vfit_mf) - vfit_mf_old
             dv[numpy.diag_indices(dv.shape[0])] = 0
             dv = numpy.linalg.norm(dv)
+
+            vfit_mf_old = embsys.unpack(vfit_mf)
+            vfit_ci_old = vfit_ci
+            e_tot_old = e_tot
+            e_corr_old = e_corr
 
             log.info(embsys, 'macro iter = %d, e_tot = %.12g, e_tot(corr) = %.12g, nelec = %g, dv = %g', \
                      icyc+1, e_tot, e_corr, nelec, dv)
@@ -344,33 +397,35 @@ class EmbSys(object):
             if dv < 1e-5:
                 break
 
-            vfit_mf_old = vfit_mf
-            vfit_ci_old = vfit_ci
-            e_tot_old = e_tot
-            e_corr_old = e_corr
-
         return e_tot, vfit_mf, vfit_ci
 
     def vfit_mf_method(self, mol, embsys):
-        emb = embsys.embs[0]
-        nimp = len(emb.bas_on_frag)
-        dv = numpy.eye(nimp) * embsys.vfit_ci[0]
-        dm_ref = embsys.solver.run(emb, emb._eri, dv, True, False)[2]
-        log.debug(embsys, 'dm_ref = %s', dm_ref)
+        dm_ref = []
+        for m,emb in enumerate(self.embs):
+            nimp = len(emb.bas_on_frag)
+            dv = numpy.eye(nimp) * embsys.vfit_ci[0]
+            dmci = embsys.solver.run(emb, emb._eri, dv, True, False)[2]
+            log.debug(embsys, 'dm_ref %d = %s', m, dmci)
+            dm_ref.append(dmci*.5)
+        if self.translational:
+            dm_ref = [dm_ref[0] for i in self.basidx_group]
 
-        sc = reduce(numpy.dot, (self.orth_coeff.T,self.entire_scf.get_ovlp(),
+        sc = reduce(numpy.dot, (self.orth_coeff.T,
+                                self.entire_scf.get_ovlp(),
                                 self.entire_scf.mo_coeff))
         # this fock matrix includes the previous fitting potential
         fock0 = numpy.dot(sc*self.entire_scf.mo_energy, sc.T.conj())
         nocc = mol.nelectron // 2
 
-        dv = embsys.fit_solver(fock0, nocc, nimp, dm_ref*.5)
-        v = embsys.vfit_mf+dv
+        dv = embsys.fit_solver(fock0, nocc, dm_ref)
+        v = [embsys.vfit_mf[m]+dv[m] for m,emb in enumerate(self.embs)]
         log.debug(self, 'vfit_mf = ')
         try:
-            pyscf.tools.dump_mat.dump_tri(self.stdout, v[:nimp,:nimp])
+            v_group = self.pack(v)
+            for vi in v_group:
+                pyscf.tools.dump_mat.dump_tri(self.stdout, vi)
         except:
-            self.stdout.write('%s\n' % str(v[:nimp,:nimp]))
+            self.stdout.write('%s\n' % str(v))
         return v
 
 
@@ -389,7 +444,7 @@ def gen_all_vfit_by(local_fit_method):
     '''fit HF DM with chemical potential'''
     def fitloop(mol, embsys):
         v_group = []
-        for m, emb in enumerate(embsys.embs):
+        for m,emb in enumerate(embsys.embs):
             dv = local_fit_method(mol, m, embsys)
             v_group.append(dv)
 
@@ -411,7 +466,7 @@ def fit_chemical_potential(mol, m, embsys):
     def nelec_diff(v):
         dv = numpy.eye(nimp) * v
         dm = embsys.solver.run(emb, emb._eri, dv, True, False)[2]
-        #print 'ddm ',v, '|',nelec_frag,dm[:nimp].trace()*6, nelec_frag - dm[:nimp].trace()
+        #print 'ddm ',nelec_frag,dm[:nimp].trace(), nelec_frag - dm[:nimp].trace()
         return nelec_frag - dm[:nimp].trace()
     sol = scipy.optimize.root(nelec_diff, 0, tol=1e-3, \
                               method='lm', options={'ftol':1e-3, 'maxiter':12})

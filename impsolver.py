@@ -64,7 +64,7 @@ def simple_hf(h1e, eri, mo, nelec):
     mol.build(False, False)
     mol.nelectron = nelec
     mf = scf.RHF(mol)
-    nocc = nelec / 2
+    nocc = nelec // 2
     dm = numpy.dot(mo[:,:nocc],mo[:,:nocc].T)*2
     mf.get_hcore = lambda mol: h1e
     mf.get_ovlp = lambda mol: numpy.eye(mo.shape[1])
@@ -129,6 +129,7 @@ def fci(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
 
     norb = h1e.shape[1]
     cis = pyscf.fci.solver(mol)
+    #cis.davidson_only=True
     #cis.verbose = 5
     eci, c = cis.kernel(h1e, eri1, norb, nelec)
     if with_1pdm:
