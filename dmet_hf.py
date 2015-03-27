@@ -272,7 +272,7 @@ class RHF(scf.hf.RHF):
                       + numpy.dot(dm_env.flatten(), vhf_env_ao.flatten()) * .5
         return energy_by_env, self.mat_ao2impbas(vhf_env_ao)
 
-    def get_init_guess(self, key=None):
+    def get_init_guess(self, *args, **kwargs):
         log.debug(self, 'init guess based on entire MO coefficients')
         mol = self.mol
         s = self.entire_scf.get_ovlp(mol)
