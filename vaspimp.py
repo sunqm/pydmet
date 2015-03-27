@@ -57,7 +57,7 @@ class OneImp(dmet_hf.RHF):
         vemb = self.get_veff(self.mol, dmemb)
         return 0, vhf - vemb
 
-    def make_init_guess(self, mol):
+    def get_init_guess(self, *args, **kwargs):
         log.debug(self, 'init guess based on entire MO coefficients')
         eff_scf = self.entire_scf
         c = numpy.dot(self.impbas_coeff.T, eff_scf.mo_coeff)
