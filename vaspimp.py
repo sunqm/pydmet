@@ -34,9 +34,9 @@ class OneImp(dmet_hf.RHF):
                                           gen_imp_site=False)
         self.impbas_coeff = self.entire_scf._vaspdump['EMBASIS']
         assert(abs(self.impbas_coeff).sum() > 1e-10) # ensure embasis has been read
-        log.debug(self, 'det(<impbas_coeff|readin embasis>) = %.12g',
-                  numpy.linalg.det(numpy.dot(self.impbas_coeff.T,
-                                             self.cons_impurity_basis())))
+#        log.debug(self, 'det(<impbas_coeff|readin embasis>) = %.12g',
+#                  numpy.linalg.det(numpy.dot(self.impbas_coeff.T,
+#                                             self.cons_impurity_basis())))
 
         self.nelectron = int(effscf.mo_occ.sum()) - self.env_orb.shape[1] * 2
         log.info(self, 'number of electrons for impurity  = %d', \
@@ -62,8 +62,7 @@ class OneImp(dmet_hf.RHF):
         eff_scf = self.entire_scf
         c = numpy.dot(self.impbas_coeff.T, eff_scf.mo_coeff)
         dm = eff_scf.make_rdm1(c, eff_scf.mo_occ)
-        hf_energy = 0
-        return hf_energy, dm
+        return dm
 
     def get_hcore(self, mol=None):
 # This one explicitly excluded the correlation potential

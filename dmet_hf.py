@@ -284,7 +284,6 @@ class RHF(scf.hf.RHF):
         dm_env = numpy.dot(env_orb, env_orb.T.conj()) * 2
         cs = numpy.dot(self.impbas_coeff.T.conj(), s)
         dm = reduce(numpy.dot, (cs, entire_scf_dm-dm_env, cs.T.conj()))
-        hf_energy = 0
         return dm
 
     def mat_ao2impbas(self, mat):
@@ -636,7 +635,6 @@ class UHF(RHF, scf.uhf.UHF):
         cs_b = numpy.dot(self.impbas_coeff[1].T.conj(), s)
         dm_a = reduce(numpy.dot, (cs_a, entire_scf_dm[0]-dm_a, cs_a.T.conj()))
         dm_b = reduce(numpy.dot, (cs_b, entire_scf_dm[1]-dm_b, cs_b.T.conj()))
-        hf_energy = 0
         return numpy.array((dm_a,dm_b))
 
 #    def eri_on_impbas(self, mol):

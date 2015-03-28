@@ -20,17 +20,13 @@ from dmet_sc import *
 # Using VASP HF results
 
 class EmbSysPeriod(dmet_sc.EmbSys):
-    def __init__(self, clustdump, jdump, kdump, fockdump, init_v=None):
-        self.clustdump= clustdump
-        self.jdump    = jdump
-        self.kdump    = kdump
-        self.fockdump = fockdump
+    def __init__(self, path, init_v=None):
         self.vasp_inpfile_pass2 = ''
 
         mol = gto.Mole()
         mol.verbose = 5
         mol.build(False, False)
-        fake_hf = vasphf.RHF(mol, clustdump, jdump, kdump, fockdump)
+        fake_hf = vasphf.RHF(mol, path)
         dmet_sc.EmbSys.__init__(self, mol, fake_hf, init_v=None)
 
         self.orth_coeff = numpy.eye(fake_hf.mo_coeff.shape[1])
