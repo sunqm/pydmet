@@ -14,6 +14,7 @@ import pyscf.lib.logger as log
 from pyscf import ao2mo
 from pyscf import lo
 from pyscf import tools
+import pyscf.scf.diis
 
 
 def select_ao_on_fragment(mol, atm_lst, bas_idx=[]):
@@ -210,6 +211,7 @@ class RHF(scf.hf.RHF):
         self.impbas_coeff = None
         self.nelectron = None
         self._vhf_env = 0
+        self.DIIS = pyscf.scf.diis.SCF_DIIS
         self.diis_start_cycle = 3
         self.diis_space = entire_scf.diis_space
         self.conv_tol = entire_scf.conv_tol
@@ -375,8 +377,7 @@ class RHF(scf.hf.RHF):
 
         self.scf_conv, self.hf_energy, self.mo_energy, \
                 self.mo_coeff_on_imp, self.mo_occ \
-                = scf.hf.kernel(self.mol, self, self.conv_tol, \
-                                   dump_chk=False)
+                = scf.hf.kernel(self, self.conv_tol, dump_chk=False)
 
         log.info(self, 'impurity MO energy')
         for i in range(self.mo_energy.size):
