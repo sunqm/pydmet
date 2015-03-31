@@ -17,13 +17,16 @@ from dmet_nonsc import *
 # Using VASP HF results
 
 class EmbSysPeriod(dmet_nonsc.EmbSys):
-    def __init__(self, path, init_v=None):
+    def __init__(self, path, init_v=None, outfile=None):
         self.vasp_inpfile_pass2 = ''
 
         mol = gto.Mole()
+        #mol.output = outfile
+        mol.stdout = outfile
         mol.verbose = 5
         mol.build(False, False)
         fake_hf = vasphf.RHF(mol, path)
+        #fake_hf = vasphf.RHF(mol, clustdump, jdump, kdump, fockdump)
         dmet_nonsc.EmbSys.__init__(self, mol, fake_hf, init_v=None)
 
         self.orth_coeff = numpy.eye(fake_hf.mo_coeff.shape[1])
