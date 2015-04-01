@@ -151,6 +151,7 @@ def padding0(mat, dims):
 class RHF(scf.hf.RHF):
     '''Non-relativistic restricted Hartree-Fock DMET'''
     def __init__(self, entire_scf, orth_ao=None):
+        scf.hf.SCF.__init__(self, entire_scf.mol)
         self.verbose = entire_scf.verbose
         self.stdout = entire_scf.stdout
 
