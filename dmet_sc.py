@@ -634,19 +634,27 @@ def fit_chemical_potential(mol, emb, embsys):
         dm = embsys.solver.run(emb, emb._eri, vmat, True, False)[2]
         #print 'ddm ',nelec_frag,dm[:nimp].trace(), nelec_frag - dm[:nimp].trace()
         return nelec_frag - dm[:nimp].trace()
-    chem_pot0 = emb.vfit_ci[0,0]
+#    chem_pot0 = emb.vfit_ci[0,0]
 #OPTIMIZE ME, approximate chemical potential
-    sol = scipy.optimize.root(nelec_diff, chem_pot0, tol=1e-3, \
-                              method='lm', options={'ftol':1e-3, 'maxiter':12})
-    nemb = emb.impbas_coeff.shape[1]
+#    sol = scipy.optimize.root(nelec_diff, chem_pot0, tol=1e-3, \
+#                              method='lm', options={'ftol':1e-3, 'maxiter':12})
+#    nemb = emb.impbas_coeff.shape[1]
+#    vmat = emb.vfit_ci.copy()
+#    for i in range(nimp):
+#        vmat[i,i] = sol.x
+#    log.debug(embsys, 'scipy.optimize summary %s', sol)
+#    log.debug(embsys, 'chem potential = %.11g, nelec error = %.11g', \
+#              sol.x, sol.fun)
+#    log.debug(embsys, '        ncall = %d, scipy.optimize success: %s', \
+#              sol.nfev, sol.success)
+
+    v1 = scipy.optimize.newton(nelec_diff, emb.vfit_ci[0,0])
     vmat = emb.vfit_ci.copy()
     for i in range(nimp):
-        vmat[i,i] = sol.x
-    log.debug(embsys, 'scipy.optimize summary %s', sol)
-    log.debug(embsys, 'chem potential = %.11g, nelec error = %.11g', \
-              sol.x, sol.fun)
-    log.debug(embsys, '        ncall = %d, scipy.optimize success: %s', \
-              sol.nfev, sol.success)
+        vmat[i,i] = v1
+    if embsys.verbose >= log.DEBUG:
+        log.debug(embsys, 'electron number diff %s', nelec_diff(v1))
+
     return vmat
 
 
