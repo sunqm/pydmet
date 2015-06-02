@@ -27,7 +27,8 @@ class OneImp(dmet_hf.RHF):
 
     def build_(self, mol=None):
         effscf = self.entire_scf
-        self._eri = self.eri_on_impbas(mol)
+        nemb = self.entire_scf._vaspdump['EMBASIS'].shape[1]
+        self._eri = ao2mo.restore(8, self.eri_on_impbas(mol), nemb)
         mo_orth = effscf.mo_coeff[:,effscf.mo_occ>1e-15]
         self.imp_site, self.bath_orb, self.env_orb = \
                 dmet_hf.decompose_orbital(self, mo_orth, self.bas_on_frag,
@@ -48,9 +49,10 @@ class OneImp(dmet_hf.RHF):
         c = numpy.dot(self.impbas_coeff.T, self.entire_scf.mo_coeff)
 # the correlation potential has been added to H1EMB. in vhf, it will cancel
 # out the correlation potential in self.entire_scf.mo_energy.
-        vhf = numpy.dot(c*self.entire_scf.mo_energy, c.T) \
-                - self.entire_scf._vaspdump['H1EMB']
+#        vhf = numpy.dot(c*self.entire_scf.mo_energy, c.T) \
+#                - self.entire_scf._vaspdump['H1EMB']
 # == vhf = self.mat_ao2impbas(self.entire_scf._vaspdump['J']+self.entire_scf._vaspdump['K'])
+        vhf = self.mat_ao2impbas(self.entire_scf._vaspdump['J']+self.entire_scf._vaspdump['K'])
 
         mocc = c[:,self.entire_scf.mo_occ>0]
         dmemb = numpy.dot(mocc, mocc.T)*2
