@@ -150,14 +150,18 @@ def read_clustdump(clustdump, hfdic):
     embasis = numpy.zeros((norb,nemb))
     eri = numpy.zeros((npair*(npair+1)/2))
     dat = finp.readline().split()
+    touched0 = touched1 = touched2 = 0
     while dat:
         i, j, k, l = map(int, dat[1:])
         if l == 0:
             h1emb[i-1,j-1] = h1emb[j-1,i-1] = float(dat[0])
+            touched0 = 1
         elif l == -1:
             mo_coeff[i-1,j-1] = float(dat[0])
+            touched1 = 1
         elif l == -2:
             embasis[i-1,j-1] = float(dat[0])
+            touched2 = 1
         elif l == -3:
             corrpot[i-1,j-1] = corrpot[j-1,i-1] = float(dat[0])
         else:
@@ -174,6 +178,8 @@ def read_clustdump(clustdump, hfdic):
             else:
                 eri[kl*(kl+1)/2+ij] = float(dat[0])
         dat = finp.readline().split()
+    if not (touched0 and touched1 and touched2):
+        raise RuntimeError("h1emb, embasis or mo_coeff are not generated")
     dic['ERI'] = eri
     dic['MO_COEFF'] = mo_coeff
     dic['EMBASIS'] = numpy.dot(mo_coeff, embasis)

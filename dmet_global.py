@@ -289,7 +289,7 @@ class EmbSys(object):
         else:
             x = scipy.optimize.minimize(lambda x:numpy.linalg.norm(diff_dm(x))**2,
                                         numpy.zeros(nimp*(nimp+1)/2),
-                                        jac=lambda x:numpy.einsum('i,ij->j',diff_dm(x),jac_ddm(x)),
+                                        #jac=lambda x:numpy.einsum('i,ij->j',diff_dm(x),jac_ddm(x)),
                                         options={'disp':False}).x
             log.debug(self, 'norm(ddm) %s', numpy.linalg.norm(diff_dm(x)))
             sol = _decompress(x)

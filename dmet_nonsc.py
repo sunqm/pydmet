@@ -210,18 +210,19 @@ def _chem_pot_on_bath(emb, v):
     return vmat
 
 def fit_chempot(mol, emb, embsys, diff_nelec):
-    chem_pot0 = emb.vfit_ci[0,0]
-    try:
-        sol = scipy.optimize.root(diff_nelec, chem_pot0, tol=1e-3, method='lm',
-                                  options={'ftol':1e-3, 'maxiter':12})
-        log.debug(embsys, 'scipy.optimize summary %s', sol)
-        log.debug(embsys, 'chem potential = %.11g, nelec error = %.11g', \
-                  sol.x, sol.fun)
-        log.debug(embsys, '        ncall = %d, scipy.optimize success: %s', \
-                  sol.nfev, sol.success)
-    except ImportError:
-        sol = scipy.optimize.leastsq(diff_nelec, chem_pot0, ftol=1e-3, xtol=1e-3)
-    return sol.x
+    return scipy.optimize.newton(diff_nelec, emb.vfit_ci[0,0])
+    #chem_pot0 = emb.vfit_ci[0,0]
+    #try:
+    #    sol = scipy.optimize.root(diff_nelec, chem_pot0, tol=1e-3, method='lm',
+    #                              options={'ftol':1e-6, 'maxiter':32})
+    #    log.debug(embsys, 'scipy.optimize summary %s', sol)
+    #    log.debug(embsys, 'chem potential = %.11g, nelec error = %.11g', \
+    #              sol.x, sol.fun)
+    #    log.debug(embsys, '        ncall = %d, scipy.optimize success: %s', \
+    #              sol.nfev, sol.success)
+    #except ImportError:
+    #    sol = scipy.optimize.leastsq(diff_nelec, chem_pot0, ftol=1e-3, xtol=1e-3)
+    #return sol.x
 
 
 

@@ -437,8 +437,8 @@ class RHF(scf.hf.RHF):
                 chg[s[0]] += pop[i]
         frag_charge = 0
         for ia in self.imp_atoms:
-            symb = mol.symbol_of_atm(ia)
-            nuc = mol.charge_of_atm(ia)
+            symb = mol.atom_symbol(ia)
+            nuc = mol.atom_charge(ia)
             log.info(self, 'charge of  %d%s =   %10.5f', \
                      ia, symb, nuc - chg[ia])
             frag_charge += nuc - chg[ia]
@@ -483,7 +483,6 @@ class UHF(RHF, scf.uhf.UHF):
         RHF.__init__(self, entire_scf, orth_ao)
         self.nelectron_alpha = None
         self.nelectron_beta = None
-        self.DIIS = UHF_DIIS
         self._keys = self._keys | set(['nelectron_alpha', 'nelectron_beta'])
 
     def decompose_den_mat(self, dm_orth):
@@ -663,23 +662,17 @@ class UHF(RHF, scf.uhf.UHF):
         e_b, c_b = scipy.linalg.eigh(fock[1], s[1])
         return (e_a,e_b), (c_a,c_b)
 
-    def get_fock(self, h1e, s1e, vhf, dm, cycle=-1, adiis=None):
+    def get_fock(self, h1e, s1e, vhf, dm, cycle=-1, adiis=None,
+                 diis_start_cycle=None, level_shift_factor=None, damp_factor=None):
+        if level_shift_factor is None:
+            level_shift_factor = self.level_shift_factor
         f = (h1e[0]+vhf[0], h1e[1]+vhf[1])
-        if 0 <= cycle < self.diis_start_cycle-1:
-            f = (scf.hf.damping(s1e[0], dm[0], f[0], self.damp_factor), \
-                 scf.hf.damping(s1e[1], dm[1], f[1], self.damp_factor))
-            f = (scf.hf.level_shift(s1e[0],dm[0],f[0],self.level_shift_factor), \
-                 scf.hf.level_shift(s1e[1],dm[1],f[1],self.level_shift_factor))
-        elif 0 <= cycle:
-            fac = self.level_shift_factor \
-                    * numpy.exp(self.diis_start_cycle-cycle-1)
-            f = (scf.hf.level_shift(s[0], d[0], f[0], fac), \
-                 scf.hf.level_shift(s[1], d[1], f[1], fac))
-
         if adiis is not None and cycle >= self.diis_start_cycle:
             f = adiis.update(s1e, dm, f)
             f = (f[:h1e[0].size].reshape(h1e[0].shape), \
                  f[h1e[0].size:].reshape(h1e[1].shape))
+        f = (scf.hf.level_shift(s[0], d[0], f[0], level_shift_factor), \
+             scf.hf.level_shift(s[1], d[1], f[1], level_shift_factor))
         return f
 
     def get_occ(self, mo_energy, mo_coeff=None):
@@ -804,19 +797,12 @@ class UHF(RHF, scf.uhf.UHF):
                 chg[s[0]] += pop_a[i] + pop_b[i]
         frag_charge = 0
         for ia in self.imp_atoms:
-            symb = mol.symbol_of_atm(ia)
-            nuc = mol.charge_of_atm(ia)
+            symb = mol.atom_symbol(ia)
+            nuc = mol.atom_charge(ia)
             log.info(self, 'charge of  %d%s =   %10.5f', \
                      ia, symb, nuc - chg[ia])
             frag_charge += nuc - chg[ia]
         log.info(self, 'charge of embsys = %10.5f', frag_charge)
-
-
-class UHF_DIIS(scf.uhf.UHF_DIIS):
-    def update(self, s, d, f):
-        self.push_err_vec(s, d, f)
-        fflat = numpy.hstack((f[0].ravel(), f[1].ravel()))
-        return scf.diis.DIIS.update(self, fflat)
 
 
 if __name__ == '__main__':
