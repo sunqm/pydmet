@@ -11,6 +11,7 @@ from pyscf import lib
 from pyscf import ao2mo
 from pyscf import tools
 from pyscf import mcscf
+from pyscf import mp
 import pyscf.fci
 
 class ImpSolver(object):
@@ -54,7 +55,6 @@ class CASSCF(ImpSolver):
             return casscf(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag,
                           ncas, nelecas, caslist)
         self.solver = f
-
 
 
 def simple_hf(h1e, eri, mo, nelec):
@@ -177,8 +177,6 @@ def casscf(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag,
     return 0, eci, e2frag, dm1
 
 
-
-
 class InterNormFCI(ImpSolver):
     '''<0|H|CI> with <0|CI> = 1'''
     def __init__(self):
@@ -213,3 +211,64 @@ def internorm_fci(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
     else:
         e2frag = None
     return 0, eci, e2frag, dm1
+
+
+class MP2(ImpSolver):
+    def __init__(self, ncas, nelecas, caslist=None):
+        def f(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
+            return mp2(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag)
+        ImpSolver.__init__(self, f)
+
+# NOTE: 1-pdm does not contribute to MP2 energy
+# EMP2 = .5 * (rdm2 * eri).sum()
+def mp2(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
+    eri1 = ao2mo.restore(8, eri, mo.shape[1])
+    hf_energy, mo_energy, mo_coeff, mo_occ = simple_hf(h1e, eri1, mo, nelec)
+    mf = scf.RHF(mol)
+    mf.get_hcore = lambda mol: h1e
+    mf._eri = eri
+    mymp2 = mp.MP2(mf)
+    mymp2.nocc = nelec // 2
+    mymp2.nmo = len(mo_energy)
+    emp2, t2 = mymp2.kernel(mo_energy, mo_coeff)
+
+    if with_1pdm:
+        rdm1 = mymp2.make_rdm1(t2)
+        for i in range(nelec//2):
+            rdm1[i,i] += 2
+        rdm1 = reduce(numpy.dot, (mo_coeff, rdm1, mo_coeff.T))
+    else:
+        rdm1 = None
+
+    if with_e2frag:
+        norb = mo_coeff.shape[0]
+        eri1 = part_eri_hermi(eri, norb, with_e2frag)
+        eri1 = ao2mo.incore.full(eri1, mo_coeff)
+        eri1 = ao2mo.restore(1, eri1, norb)
+        rdm2 = mymp2.make_rdm2(t2)
+        for i in range(nelec//2):
+            for j in range(nelec//2):
+                rdm2[i,i,j,j] += 4
+                rdm2[i,j,i,j] +=-2
+        e2frag = .5*numpy.dot(rdm2.reshape(-1), eri1.reshape(-1))
+    else:
+        e2frag = None
+    return hf_energy, emp2+hf_energy, e2frag, rdm1
+
+
+if __name__ == '__main__':
+    from pyscf import gto, scf, ao2mo, mp
+    mol = gto.M(atom='H 0 0 0; F 0 0 1', basis='6-31g')
+    mf = scf.RHF(mol)
+    mf.kernel()
+    mymp2 = mp.MP2(mf)
+    mymp2.kernel()
+    fakemo = mf.mo_coeff
+    h1 = reduce(numpy.dot, (fakemo.T, mf.get_hcore(), fakemo))
+    eri = ao2mo.kernel(mf._eri, fakemo)
+    ehf, etot, efrag, dm1 = mp2(mol, h1, eri, numpy.eye(fakemo.shape[1]),
+                                10, True, 11)
+    print ehf + mol.energy_nuc()
+    print etot + mol.energy_nuc()
+    print efrag + h1.diagonal()[:5].sum()*2 + mol.energy_nuc()
+
