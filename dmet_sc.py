@@ -426,6 +426,12 @@ class EmbSys(object):
         else:
             h1e = emb.mat_ao2impbas(emb.entire_scf.get_hcore(emb.mol))
 
+        nelec_frag = dm1[:nimp].trace()
+
+# overwrite dm1 because the MP2 dm1 does not contribute to MP2 energy
+        if isinstance(self.solver, impsolver.MP2):
+            dm1 = emb.make_rdm1(emb.mo_coeff_on_imp)
+
         e1_frag = numpy.dot(dm1[:nimp,:nimp].flatten(),h1e[:nimp,:nimp].flatten())
         e1_bath = numpy.dot(dm1[:nimp,nimp:].flatten(),h1e[:nimp,nimp:].flatten())
 #        if self.env_pot_for_ci and emb.vfit_ci is not 0:
@@ -439,7 +445,6 @@ class EmbSys(object):
 
         e2env_hf = numpy.dot(dm1[:nimp].flatten(), \
                              emb._vhf_env[:nimp].flatten()) * .5
-        nelec_frag = dm1[:nimp].trace()
         e_frag = e1 + e2env_hf + e2frag
         log.debug(emb, 'fragment e1 = %.12g, e2env_hf = %.12g, FCI pTraceSys = %.12g, sum = %.12g', \
                   e1, e2env_hf, e2frag, e_frag)
