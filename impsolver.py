@@ -214,7 +214,7 @@ def internorm_fci(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
 
 
 class MP2(ImpSolver):
-    def __init__(self, ncas, nelecas, caslist=None):
+    def __init__(self):
         def f(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag):
             return mp2(mol, h1e, eri, mo, nelec, with_1pdm, with_e2frag)
         ImpSolver.__init__(self, f)

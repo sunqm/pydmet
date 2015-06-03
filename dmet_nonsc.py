@@ -228,7 +228,7 @@ def fit_chempot(mol, emb, embsys, diff_nelec):
 
 if __name__ == '__main__':
     from pyscf import scf
-    from pyscf import gto
+    from pyscf import gto, mp
 
     mol = gto.Mole()
     mol.verbose = 5
@@ -253,3 +253,16 @@ if __name__ == '__main__':
     embsys = EmbSys(mol, mf, [[0,1]])
     print embsys.one_shot() # -17.912887125
 
+    mol.atom = 'He 0 0 0; He 0 0 1.2'
+    mol.basis = '6-31g'
+    mol.verbose = 0
+    mol.output = None
+    mol.build()
+    mf = scf.RHF(mol)
+    print 'EHF =', mf.scf()
+    mymp2 = mp.MP2(mf)
+    emp2 = mymp2.kernel()[0]
+    print 'EMP2 = ', emp2 + mf.hf_energy
+    embsys = EmbSys(mol, mf, [[0],[1]])
+    embsys.solver = impsolver.MP2()
+    print 'Eemb =', embsys.one_shot() + mol.energy_nuc()
