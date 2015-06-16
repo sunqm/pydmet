@@ -45,6 +45,39 @@ class EmbSys(dmet_sc.EmbSys):
                  e_tot, nelec)
         return e_tot
 
+    def energy_calc(self):
+        log.info(self, '==== Calculating DMET E_corr with read-in v_fit ====')
+        mol = self.mol
+        self.init_embsys(mol)
+        emb = self.embs[0]
+        emb.verbose = self.verbose
+        emb.imp_scf()
+        nimp = len(emb.bas_on_frag)
+
+        print('Correlation potential: ')
+        print(self._init_v)
+        
+        etot, e2frag, dm1 = self.solver.run(emb, emb._eri, self._init_v, with_1pdm=True,
+                                            with_e2frag=nimp)
+        log.debug(self,'Total energy returned from solver: %.11g',etot)
+        e_tot = etot + emb.energy_by_env
+        e_frag, nelec_frag = self.extract_frag_energy(emb, dm1, e2frag)
+        hfdm = emb.make_rdm1(emb.mo_coeff_on_imp, emb.mo_occ)
+        vhf = emb.get_veff(mol, hfdm)
+        nelechf = hfdm[:nimp].trace()
+        ehfinhf = (hfdm[:nimp]*(emb._pure_hcore)[:nimp]).sum() \
+                + (hfdm[:nimp]*(vhf+emb._vhf_env)[:nimp]).sum() * .5
+        log.debug(self, 'without further fitting, e_tot = %.11g, e_frag = %.11g, nelec_frag = %.11g',
+                  e_tot, e_frag, nelec_frag)
+        log.debug(self, '              HF-in-HF, frag energy = %.12g, nelec = %.9g',
+                 ehfinhf, nelechf)
+        log.debug(self, '             FCI-in-HF, frag energy = %.12g, E_corr = %.12g, nelec = %.9g', \
+                  e_frag, e_frag-ehfinhf, nelec_frag)
+        log.log(self, 'dmet_nonsc.energy_calc: e_tot = %.11g, (+nuc=%.11g)', \
+                e_tot, e_tot+mol.energy_nuc())
+        log.log(self, 'e_frag = %.11g, nelec_frag = %.11g', e_frag, nelec_frag)
+        return e_tot
+
     def one_shot(self):
         log.info(self, '==== one-shot ====')
         mol = self.mol
@@ -58,6 +91,7 @@ class EmbSys(dmet_sc.EmbSys):
         log.info(self, '===== CI/CC before Fitting =====')
         etot, e2frag, dm1 = self.solver.run(emb, emb._eri, with_1pdm=True,
                                             with_e2frag=nimp)
+        log.debug(self,'Total energy returned from solver: %.11g',etot)
         e_tot = etot + emb.energy_by_env
         e_frag, nelec_frag = self.extract_frag_energy(emb, dm1, e2frag)
         hfdm = emb.make_rdm1(emb.mo_coeff_on_imp, emb.mo_occ)
@@ -99,6 +133,7 @@ class EmbSys(dmet_sc.EmbSys):
         log.log(self, 'dmet_nonsc.one_shot: e_tot = %.11g, (+nuc=%.11g)', \
                 e_tot, e_tot+mol.energy_nuc())
         log.log(self, 'e_frag = %.11g, nelec_frag = %.11g', e_frag, nelec_frag)
+        self._final_v = vfit_ci
         return e_tot
 
 # emb._project_fock - emb._pure_hcore will include the fitting potential into

@@ -39,6 +39,8 @@ class EmbSysPeriod(dmet_nonsc.EmbSys):
         self.emb_verbose = 5
         self.pot_on = 'IMP'  # or 'BATH', or 'IMP,BATH'
 
+        self._init_v = init_v
+
     def init_embsys(self, mol):
         eff_scf = self.entire_scf
         #embs = self.init_embs(mol, self.entire_scf, self.orth_coeff)

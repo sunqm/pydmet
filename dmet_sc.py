@@ -123,6 +123,7 @@ class EmbSys(object):
         self.solver = impsolver.FCI()
 
         self._init_v = init_v
+        self._final_v = None
 
     def dump_flags(self):
         log.info(self, '\n')
