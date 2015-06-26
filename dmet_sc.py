@@ -654,7 +654,7 @@ def fit_chemical_potential(mol, emb, embsys):
 #    log.debug(embsys, '        ncall = %d, scipy.optimize success: %s', \
 #              sol.nfev, sol.success)
 
-    v1 = scipy.optimize.newton(nelec_diff, emb.vfit_ci[0,0])
+    v1 = scipy.optimize.newton(nelec_diff, emb.vfit_ci[0,0], maxiter=500)
     vmat = emb.vfit_ci.copy()
     for i in range(nimp):
         vmat[i,i] = v1

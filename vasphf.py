@@ -133,8 +133,13 @@ def read_clustdump(clustdump, hfdic):
         if kv.isdigit():
             dic[klast].append(int(kv))
         else:
-            klast = kv
-            dic[klast] = []
+            try:
+                float(kv)
+                dic[klast].append(float(kv))
+            except ValueError:
+                klast = kv
+                dic[klast] = []
+
     for k, v in dic.items():
         if k != 'ORBIND':
             dic[k] = v[0]
@@ -142,6 +147,7 @@ def read_clustdump(clustdump, hfdic):
     dic['NEMB'] = dic['NORB']
 
     nemb = dic['NEMB']
+    nembelec = dic['NELECEMB']
     norb = hfdic['NORB']
     npair = nemb*(nemb+1)/2
     h1emb = numpy.zeros((nemb,nemb))
