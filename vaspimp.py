@@ -27,22 +27,19 @@ class OneImp(dmet_hf.RHF):
 
     def build_(self, mol=None):
         effscf = self.entire_scf
+        self.imp_site = None
+        self.bath_orb = None
+        self.env_orb = None
         nemb = self.entire_scf._vaspdump['EMBASIS'].shape[1]
         self._eri = ao2mo.restore(8, self.eri_on_impbas(mol), nemb)
         mo_orth = effscf.mo_coeff[:,effscf.mo_occ>1e-15]
-        self.imp_site, self.bath_orb, self.env_orb = \
-                dmet_hf.decompose_orbital(self, mo_orth, self.bas_on_frag,
-                                          gen_imp_site=False)
         self.impbas_coeff = self.entire_scf._vaspdump['EMBASIS']
-        assert(abs(self.impbas_coeff).sum() > 1e-10) # ensure embasis has been read
-#        log.debug(self, 'det(<impbas_coeff|readin embasis>) = %.12g',
-#                  numpy.linalg.det(numpy.dot(self.impbas_coeff.T,
-#                                             self.cons_impurity_basis())))
+        assert(numpy.linalg.norm(self.impbas_coeff) > 1e-10) # ensure embasis has been read
 
-        self.nelectron = int(effscf.mo_occ.sum()) - self.env_orb.shape[1] * 2
-        log.info(self, 'number of electrons for impurity  = %d', \
-                 self.nelectron)
-        self.energy_by_env, self._vhf_env = self.init_vhf_env(self.env_orb)
+        self.nelectron = int(round(self.entire_scf._vaspdump['NELECEMB']))
+        log.info(self, 'number of electrons = %f (%d)', \
+                 self.entire_scf._vaspdump['NELECEMB'], self.nelectron)
+        self.energy_by_env, self._vhf_env = self.init_vhf_env(None)
 
     def init_vhf_env(self, env_orb):
         nemb = self.impbas_coeff.shape[1]

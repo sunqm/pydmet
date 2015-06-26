@@ -69,7 +69,8 @@ class EmbSysPeriod(dmet_sc.EmbSys):
             emb.mo_occ = numpy.zeros_like(emb.mo_energy)
             emb.mo_occ[:emb.nelectron/2] = 2
             emb.hf_energy = 0
-            nimp = emb.imp_site.shape[1]
+            #nimp = emb.imp_site.shape[1]
+            nimp = len(emb.bas_on_frag)
             cimp = numpy.dot(emb.impbas_coeff[:,:nimp].T, sc[:,:nocc])
             emb._pure_hcore = emb.get_hcore() \
                     - emb._vhf_env # exclude HF[core] and correlation potential

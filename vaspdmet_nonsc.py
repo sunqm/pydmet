@@ -21,8 +21,8 @@ class EmbSysPeriod(dmet_nonsc.EmbSys):
         self.vasp_inpfile_pass2 = ''
 
         mol = gto.Mole()
-        #mol.output = outfile
-        mol.stdout = outfile
+        mol.output = outfile
+        #mol.stdout = outfile
         mol.verbose = 5
         mol.build(False, False)
         fake_hf = vasphf.RHF(mol, path)
@@ -136,8 +136,8 @@ class EmbSysPeriod(dmet_nonsc.EmbSys):
 #        return e_frag
 
     def scdmet(self, init_v=None):
-        return self.one_shot(mol)
+        return self.one_shot()
 
     def fullsys(self, init_v=None):
-        return self.one_shot(mol)
+        return self.one_shot()
 
