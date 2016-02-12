@@ -13,8 +13,6 @@ from pyscf.tools import dump_mat
 
 def dmet_cas(casscf, dm, baslst, occ_cutoff=1e-8, baths=None, base=1,
              orth_method='meta_lowdin', verbose=logger.WARN):
-#    if casscf.mol.symmetry:
-#        raise RuntimeError('dmet_cas breaks spatial symmetry!')
     from pyscf import lo
     if not (isinstance(dm, numpy.ndarray) and dm.ndim == 2): # ROHF/UHF DM
         dm = sum(dm)
@@ -31,13 +29,41 @@ def dmet_cas(casscf, dm, baslst, occ_cutoff=1e-8, baths=None, base=1,
     mocore = mo[:,:casscf.ncore]
     mocas = mo[:,casscf.ncore:casscf.ncore+casscf.ncas]
     movir = mo[:,casscf.ncore+casscf.ncas:]
-    sc = numpy.dot(casscf._scf.get_ovlp(), casscf._scf.mo_coeff)
+    s = casscf._scf.get_ovlp()
+    sc = numpy.dot(s, casscf._scf.mo_coeff)
     fock = reduce(numpy.dot, (sc*casscf._scf.mo_energy, sc.T))
+
+    def search_for_degeneracy(e):
+        idx = numpy.where(abs(e[1:] - e[:-1]) < 1e-6)[0]
+        return numpy.unique(numpy.hstack((idx, idx+1)))
+    def symmetrize(e, c):
+        if casscf.mol.symmetry:
+            degidx = search_for_degeneracy(e)
+            if degidx.size > 0:
+                esub = e[degidx]
+                csub = c[:,degidx]
+                scsub = numpy.dot(s, csub)
+                es = []
+                cs = []
+                for i,ir in enumerate(mol.irrep_id):
+                    so = mol.symm_orb[i]
+                    sosc = numpy.dot(so.T, scsub)
+                    s_ir = reduce(numpy.dot, (so.T, s, so))
+                    fock_ir = numpy.dot(sosc*esub, sosc.T)
+                    e, u = scipy.linalg.eigh(fock_ir, s_ir)
+                    idx = abs(e) > 1e-14
+                    es.append(e[idx])
+                    cs.append(numpy.dot(mol.symm_orb[i], u[:,idx]))
+                es = numpy.hstack(es)
+                idx = numpy.argsort(es)
+                assert(numpy.allclose(es[idx], esub))
+                c[:,degidx] = numpy.hstack(cs)[:,idx]
+        return c
     mo = []
     for c in (mocore, mocas, movir):
         f1 = reduce(numpy.dot, (c.T, fock, c))
         e, u = scipy.linalg.eigh(f1)
-        mo.append(numpy.dot(c, u))
+        mo.append(symmetrize(e, numpy.dot(c, u)))
     mo = numpy.hstack(mo)
 
     if ncore_guess != casscf.ncore:
@@ -143,7 +169,7 @@ def _decompose_dm(mol, dm, baslst, ncas, nelecas, ncore, occ_cutoff=1e-8,
     casort = numpy.argsort(occ[ncore:nocc])[::-1] + ncore
     #mo = numpy.hstack((mo[:,:ncore], mo[:,casort], mo[:,nocc:]))
     #log.debug('active occs %s', occ[casort])
-    log.debug('active occs %s', occ[ncore:nocc])
+    log.debug('active occs %s  sum %s', occ[ncore:nocc], occ[ncore:nocc].sum())
     if abs(2-occ[ncore-1]) > occ_cutoff:
         log.info('Approx core space, core occ %g < 2', occ[ncore-1])
     if abs(occ[nocc]) > occ_cutoff:
@@ -230,6 +256,7 @@ if __name__ == '__main__':
     from pyscf import scf
     from pyscf import gto
     from pyscf import mcscf
+    from pyscf import symm
 
     b = 1.4
     mol = gto.M(
@@ -238,6 +265,7 @@ if __name__ == '__main__':
         ['N',(  0.000000,  0.000000, -b/2)],
         ['N',(  0.000000,  0.000000,  b/2)], ],
     basis = {'N': 'ccpvdz', },
+    symmetry= 1
     )
 
     m = scf.RHF(mol)
@@ -248,6 +276,7 @@ if __name__ == '__main__':
     #_decompose_orbital(mol, m.mo_coeff, 7, aolst, verbose=5)
     #mo = dmet_decompose(mc, m.mo_coeff, aolst)
     mo = dmet_cas(mc, m.make_rdm1(), aolst, verbose=5)
+    print(symm.label_orb_symm(mol, mol.irrep_id, mol.symm_orb, mo))
     emc = mc.kernel(mo)[0]
     print(emc, emc - -108.922564421274)
 
