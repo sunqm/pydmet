@@ -39,10 +39,12 @@ def dmet_cas(casscf, dm, baslst, occ_cutoff=1e-8, baths=None, base=1,
     def symmetrize(e, c):
         if casscf.mol.symmetry:
             degidx = search_for_degeneracy(e)
+            log.debug1('degidx %s', degidx)
             if degidx.size > 0:
                 esub = e[degidx]
                 csub = c[:,degidx]
                 scsub = numpy.dot(s, csub)
+                emin = abs(esub).min() * .5
                 es = []
                 cs = []
                 for i,ir in enumerate(mol.irrep_id):
@@ -51,7 +53,7 @@ def dmet_cas(casscf, dm, baslst, occ_cutoff=1e-8, baths=None, base=1,
                     s_ir = reduce(numpy.dot, (so.T, s, so))
                     fock_ir = numpy.dot(sosc*esub, sosc.T)
                     e, u = scipy.linalg.eigh(fock_ir, s_ir)
-                    idx = abs(e) > 1e-14
+                    idx = abs(e) > emin
                     es.append(e[idx])
                     cs.append(numpy.dot(mol.symm_orb[i], u[:,idx]))
                 es = numpy.hstack(es)
@@ -63,6 +65,7 @@ def dmet_cas(casscf, dm, baslst, occ_cutoff=1e-8, baths=None, base=1,
     for c in (mocore, mocas, movir):
         f1 = reduce(numpy.dot, (c.T, fock, c))
         e, u = scipy.linalg.eigh(f1)
+        log.debug1('Fock eig %s', e)
         mo.append(symmetrize(e, numpy.dot(c, u)))
     mo = numpy.hstack(mo)
 
