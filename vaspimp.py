@@ -80,24 +80,24 @@ class OneImp(dmet_hf.RHF):
         self.orth_coeff = self.get_orth_ao(self.mol)
         self.dump_flags()
         self.build_(self.mol)
-        self.scf_conv, self.hf_energy, self.mo_energy, \
+        self.scf_conv, self.e_tot, self.mo_energy, \
                 self.mo_coeff_on_imp, self.mo_occ \
                 = scf.hf.kernel(self, self.conv_tol, dump_chk=False)
         #self.mo_coeff = numpy.dot(self.impbas_coeff, self.mo_coeff_on_imp)
         self.mo_coeff = self.mo_coeff_on_imp # because the integrals are read from FCIDUMP
         if self.scf_conv:
             log.log(self, 'converged impurity sys electronic energy = %.15g', \
-                    self.hf_energy)
+                    self.e_tot)
         else:
             log.log(self, 'SCF not converge.')
             log.log(self, 'electronic energy = %.15g after %d cycles.', \
-                    self.hf_energy, self.max_cycle)
+                    self.e_tot, self.max_cycle)
 
         dm = self.make_rdm1(self.mo_coeff_on_imp, self.mo_occ)
         vhf = self.get_veff(self.mol, dm)
-        self.hf_energy, self.e_frag, self.nelec_frag = \
+        self.e_tot, self.e_frag, self.nelec_frag = \
                 self.calc_frag_elec_energy(self.mol, vhf, dm)
-        return self.hf_energy
+        return self.e_tot
 
     def mulliken_pop(self, mol, dm, ovlp=None, verbose=logger.DEBUG):
         if ovlp is None:

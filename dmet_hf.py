@@ -220,8 +220,8 @@ class RHF(scf.hf.RHF):
         self.init_guess = None
         self.direct_scf = entire_scf.direct_scf
         self.direct_scf_tol = entire_scf.direct_scf_tol
-        self.level_shift_factor = 0
-        self.damp_factor = 0
+        self.level_shift = 0
+        self.damp = 0
         self.scf_conv = False
         self.direct_scf = True
         self.direct_scf_tol = 1e-13
@@ -375,7 +375,7 @@ class RHF(scf.hf.RHF):
         self.build_()
         self.dump_flags()
 
-        self.scf_conv, self.hf_energy, self.mo_energy, \
+        self.scf_conv, self.e_tot, self.mo_energy, \
                 self.mo_coeff_on_imp, self.mo_occ \
                 = scf.hf.kernel(self, self.conv_tol, dump_chk=False)
 
@@ -392,11 +392,11 @@ class RHF(scf.hf.RHF):
         #log.log(self, 'impurity sys nuclear repulsion = %.15g', e_nuc)
         if self.scf_conv:
             log.log(self, 'converged impurity sys electronic energy = %.15g', \
-                    self.hf_energy)
+                    self.e_tot)
         else:
             log.log(self, 'SCF not converge.')
             log.log(self, 'electronic energy = %.15g after %d cycles.', \
-                    self.hf_energy, self.max_cycle)
+                    self.e_tot, self.max_cycle)
 
         # mo_coeff_on_imp based on embedding basis
         # mo_coeff based on AOs
@@ -404,7 +404,7 @@ class RHF(scf.hf.RHF):
 
         dm = self.make_rdm1(self.mo_coeff_on_imp, self.mo_occ)
         vhf = self.get_veff(self.mol, dm)
-        self.hf_energy, self.e_frag, self.nelec_frag = \
+        self.e_tot, self.e_frag, self.nelec_frag = \
                 self.calc_frag_elec_energy(self.mol, vhf, dm)
         log.log(self, 'fragment electronic energy = %.15g', self.e_frag)
         log.log(self, 'fragment electron number = %.15g', self.nelec_frag)
@@ -665,7 +665,7 @@ class UHF(RHF, scf.uhf.UHF):
     def get_fock(self, h1e, s1e, vhf, dm, cycle=-1, adiis=None,
                  diis_start_cycle=None, level_shift_factor=None, damp_factor=None):
         if level_shift_factor is None:
-            level_shift_factor = self.level_shift_factor
+            level_shift_factor = self.level_shift
         f = (h1e[0]+vhf[0], h1e[1]+vhf[1])
         if adiis is not None and cycle >= self.diis_start_cycle:
             f = adiis.update(s1e, dm, f)
@@ -710,7 +710,7 @@ class UHF(RHF, scf.uhf.UHF):
         self.dump_flags()
         self.build_()
 
-        self.scf_conv, self.hf_energy, self.mo_energy, \
+        self.scf_conv, self.e_tot, self.mo_energy, \
                 self.mo_coeff_on_imp, self.mo_occ \
                 = scf.hf.kernel(self.mol, self, self.conv_tol, \
                                    dump_chk=False)
@@ -729,15 +729,15 @@ class UHF(RHF, scf.uhf.UHF):
 
         if self.scf_conv:
             log.log(self, 'converged impurity sys electronic energy = %.15g', \
-                    self.hf_energy)
+                    self.e_tot)
         else:
             log.log(self, 'SCF not converge.')
             log.log(self, 'electronic energy = %.15g after %d cycles.', \
-                    self.hf_energy, self.max_cycle)
+                    self.e_tot, self.max_cycle)
 
         dm = self.make_rdm1(self.mo_coeff_on_imp, self.mo_occ)
         vhf = self.get_veff(self.mol, dm)
-        self.hf_energy, self.e_frag, self.nelec_frag = \
+        self.e_tot, self.e_frag, self.nelec_frag = \
                 self.calc_frag_elec_energy(self.mol, vhf, dm)
         log.log(self, 'fragment electronic energy = %.15g', self.e_frag)
         log.log(self, 'fragment electron number = %.15g', self.nelec_frag)

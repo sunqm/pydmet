@@ -233,7 +233,7 @@ if __name__ == '__main__':
     emb.imp_basidx = [0,1]
     emb.orth_ao_method = 'lowdin'
     print emb.imp_scf()
-    print emb.hf_energy
+    print emb.e_tot
 
     nemb = emb.impbas_coeff.shape[1]
     mo = emb.mo_coeff_on_imp

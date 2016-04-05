@@ -68,7 +68,7 @@ class EmbSysPeriod(dmet_sc.EmbSys):
             emb.mo_coeff = numpy.dot(emb.impbas_coeff, emb.mo_coeff_on_imp)
             emb.mo_occ = numpy.zeros_like(emb.mo_energy)
             emb.mo_occ[:emb.nelectron/2] = 2
-            emb.hf_energy = 0
+            emb.e_tot = 0
             #nimp = emb.imp_site.shape[1]
             nimp = len(emb.bas_on_frag)
             cimp = numpy.dot(emb.impbas_coeff[:,:nimp].T, sc[:,:nocc])

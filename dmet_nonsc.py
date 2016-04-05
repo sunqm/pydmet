@@ -297,7 +297,7 @@ if __name__ == '__main__':
     print 'EHF =', mf.scf()
     mymp2 = mp.MP2(mf)
     emp2 = mymp2.kernel()[0]
-    print 'EMP2 = ', emp2 + mf.hf_energy
+    print 'EMP2 = ', emp2 + mf.e_tot
     embsys = EmbSys(mol, mf, [[0],[1]])
     embsys.solver = impsolver.MP2()
     print 'Eemb =', embsys.one_shot() + mol.energy_nuc()

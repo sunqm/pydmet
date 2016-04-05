@@ -238,7 +238,7 @@ class EmbSys(object):
             emb.mo_coeff = numpy.dot(emb.impbas_coeff, emb.mo_coeff_on_imp)
             emb.mo_occ = numpy.zeros_like(emb.mo_energy)
             emb.mo_occ[:emb.nelectron/2] = 2
-            emb.hf_energy = 0
+            emb.e_tot = 0
             nimp = emb.imp_site.shape[1]
             cimp = numpy.dot(emb.impbas_coeff[:,:nimp].T, sc[:,:nocc])
             emb._pure_hcore = emb.mat_ao2impbas(hcore)
@@ -266,7 +266,7 @@ class EmbSys(object):
             rdm1 = emb.make_rdm1()
             emb.get_hcore = lambda *args: h1e
             emb.get_ovlp = lambda *args: numpy.eye(nemb)
-            emb.scf_conv, emb.hf_energy, emb.mo_energy, \
+            emb.scf_conv, emb.e_tot, emb.mo_energy, \
                     emb.mo_coeff_on_imp, emb.mo_occ \
                     = scf.hf.kernel(emb, emb.conv_tol,
                                     dump_chk=False, dm0=rdm1)
@@ -285,7 +285,7 @@ class EmbSys(object):
 # Do embedding SCF for impurity solver since the embedded HF with vfit_ci
 # cannot be directly projected from the entire SCF results.
 # emb.mo_coeff_on_imp will be used in solver
-                #emb.scf_conv, emb.hf_energy, emb.mo_energy, emb.mo_occ, \
+                #emb.scf_conv, emb.e_tot, emb.mo_energy, emb.mo_occ, \
                 #        emb.mo_coeff_on_imp \
                 #        = simple_hf(emb._pure_hcore+emb._vhf_env+emb.vfit_ci,
                 #                    emb._eri, emb.mo_coeff_on_imp, emb.nelectron)
@@ -707,7 +707,7 @@ def dmet_sc_cycle(mol, embsys):
         e_tot_old = e_tot
         e_corr_old = e_corr
 
-        #log.debug(embsys, '  HF energy = %.12g', embsys.entire_scf.hf_energy)
+        #log.debug(embsys, '  HF energy = %.12g', embsys.entire_scf.e_tot)
         v_mf_group = embsys.vfit_mf_method(mol, embsys)
         embsys.update_embsys(mol, v_mf_group)
 
@@ -812,7 +812,7 @@ def run_hf_with_ext_pot_(mol, entire_scf, vext_on_ao, follow_state=False):
         eff_scf.get_occ = _occ_follow_state
 
     log.debug(eff_scf, '-- entire molecule SCF with fitting potential')
-    eff_scf.scf_conv, eff_scf.hf_energy, eff_scf.mo_energy, \
+    eff_scf.scf_conv, eff_scf.e_tot, eff_scf.mo_energy, \
             eff_scf.mo_coeff, eff_scf.mo_occ \
             = scf.hf.kernel(eff_scf, eff_scf.conv_tol, dump_chk=False,
                             dm0=dm)

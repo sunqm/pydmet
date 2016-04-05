@@ -34,7 +34,7 @@ class RHF(dmet_hf.RHF):
         dm_env = numpy.dot(env_orb, env_orb.T.conj()) * 2
         cs = numpy.dot(self.impbas_coeff.T.conj(), s)
         dm = reduce(numpy.dot, (cs, entire_scf_dm-dm_env, cs.T.conj()))
-        hf_energy = 0
+        e_tot = 0
         return dm
 
     def mat_ao2impbas(self, mat):
@@ -168,7 +168,7 @@ environment two-electron part'''
         dd = self.dets_ovlp(self.mol, self.impbas_coeff)
         log.info(self, 'overlap of determinants before SCF = %.15g', dd)
 
-        self.scf_conv, self.hf_energy, self.mo_energy, self.mo_occ, \
+        self.scf_conv, self.e_tot, self.mo_energy, self.mo_occ, \
                 self.mo_coeff_on_imp \
                 = scf.hf.kernel(self, self.conv_tol, dump_chk=False)
 
@@ -185,11 +185,11 @@ environment two-electron part'''
         #log.log(self, 'impurity sys nuclear repulsion = %.15g', e_nuc)
         if self.scf_conv:
             log.log(self, 'converged impurity sys electronic energy = %.15g', \
-                    self.hf_energy)
+                    self.e_tot)
         else:
             log.log(self, 'SCF not converge.')
             log.log(self, 'electronic energy = %.15g after %d cycles.', \
-                    self.hf_energy, self.max_cycle)
+                    self.e_tot, self.max_cycle)
 
         # mo_coeff_on_imp based on embedding basis + bath
         # mo_coeff based on AOs
@@ -452,7 +452,7 @@ class UHF(dmet_hf.UHF):
         cs_b = numpy.dot(self.impbas_coeff[1].T.conj(), s)
         dm_a = reduce(numpy.dot, (cs_a, entire_scf_dm[0]-dm_a, cs_a.T.conj()))
         dm_b = reduce(numpy.dot, (cs_b, entire_scf_dm[1]-dm_b, cs_b.T.conj()))
-        hf_energy = 0
+        e_tot = 0
         return numpy.array((dm_a,dm_b))
 
 #    def eri_on_impbas(self, mol):
@@ -483,12 +483,12 @@ class UHF(dmet_hf.UHF):
     def get_fock(self, h1e, s1e, vhf, dm, cycle=-1, adiis=None):
         f = (h1e[0]+vhf[0], h1e[1]+vhf[1])
         if 0 <= cycle < self.diis_start_cycle-1:
-            f = (scf.hf.damping(s1e[0], dm[0], f[0], self.damp_factor), \
-                 scf.hf.damping(s1e[1], dm[1], f[1], self.damp_factor))
-            f = (scf.hf.level_shift(s1e[0],dm[0],f[0],self.level_shift_factor), \
-                 scf.hf.level_shift(s1e[1],dm[1],f[1],self.level_shift_factor))
+            f = (scf.hf.damping(s1e[0], dm[0], f[0], self.damp), \
+                 scf.hf.damping(s1e[1], dm[1], f[1], self.damp))
+            f = (scf.hf.level_shift(s1e[0],dm[0],f[0],self.level_shift), \
+                 scf.hf.level_shift(s1e[1],dm[1],f[1],self.level_shift))
         elif 0 <= cycle:
-            fac = self.level_shift_factor \
+            fac = self.level_shift \
                     * numpy.exp(self.diis_start_cycle-cycle-1)
             f = (scf.hf.level_shift(s[0], d[0], f[0], fac), \
                  scf.hf.level_shift(s[1], d[1], f[1], fac))
@@ -536,7 +536,7 @@ class UHF(dmet_hf.UHF):
         self.dump_flags()
         self.build_()
 
-        self.scf_conv, self.hf_energy, self.mo_energy, self.mo_occ, \
+        self.scf_conv, self.e_tot, self.mo_energy, self.mo_occ, \
                 self.mo_coeff_on_imp \
                 = scf.hf.kernel(self, self.conv_tol, dump_chk=False)
 
@@ -554,11 +554,11 @@ class UHF(dmet_hf.UHF):
 
         if self.scf_conv:
             log.log(self, 'converged impurity sys electronic energy = %.15g', \
-                    self.hf_energy)
+                    self.e_tot)
         else:
             log.log(self, 'SCF not converge.')
             log.log(self, 'electronic energy = %.15g after %d cycles.', \
-                    self.hf_energy, self.max_cycle)
+                    self.e_tot, self.max_cycle)
 
 #        # mo_coeff_on_imp based on embedding basis + bath
 #        # mo_coeff based on AOs

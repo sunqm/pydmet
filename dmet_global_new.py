@@ -94,7 +94,7 @@ class EmbSys(object):
             emb.mo_coeff = numpy.dot(emb.impbas_coeff, emb.mo_coeff_on_imp)
             emb.mo_occ = numpy.zeros_like(emb.mo_energy)
             emb.mo_occ[:emb.nelectron/2] = 2
-            emb.hf_energy = 0
+            emb.e_tot = 0
             nimp = emb.imp_site.shape[1]
             cimp = numpy.dot(emb.impbas_coeff[:,:nimp].T, sc[:,:nocc])
             emb._pure_hcore = emb.mat_ao2impbas(hcore)
@@ -122,7 +122,7 @@ class EmbSys(object):
 
         dm0 = eff_scf.make_rdm1(eff_scf.mo_coeff, eff_scf.mo_occ)
 
-        eff_scf.scf_conv, eff_scf.hf_energy, eff_scf.mo_energy, \
+        eff_scf.scf_conv, eff_scf.e_tot, eff_scf.mo_energy, \
                 eff_scf.mo_coeff, eff_scf.mo_occ \
                 = scf.hf.kernel(eff_scf, eff_scf.conv_tol, dump_chk=False,
                                 dm0=dm0)
@@ -365,7 +365,7 @@ class EmbSys(object):
 
         for icyc in range(embsys.max_iter):
 
-            #log.debug(embsys, '  HF energy = %.12g', embsys.entire_scf.hf_energy)
+            #log.debug(embsys, '  HF energy = %.12g', embsys.entire_scf.e_tot)
             vfit_mf = embsys.vfit_mf_method(mol, embsys)
             embsys.update_embsys(mol, vfit_mf, vfit_ci)
 
